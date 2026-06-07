@@ -2,6 +2,7 @@ import os
 import time
 import json
 import io
+import re
 import gspread
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -20,7 +21,7 @@ class GradingSchema(BaseModel):
     mcq_quiz: list[dict] = [] 
 
 def get_google_services():
-    # Load the user token instead of the service account
+    # Authenticate using the User Token from GitHub Secrets
     token_dict = json.loads(os.environ.get('GOOGLE_TOKEN_JSON'))
     creds = Credentials.from_authorized_user_info(token_dict)
     
@@ -49,14 +50,15 @@ def get_prompt(curr, tmpl, assessment_type, score, typed_text):
     Return as JSON: {{"score": integer, "lesson": "string", "mcq_quiz": []}}
     """
 
-def create_new_assessment_form(comp_code, assessment_type, form_service, folder_id):
+def create_new_assessment_form(comp_code, assessment_type, form_service):
     form_body = {"info": {"title": f"Assessment: {comp_code} - {assessment_type.upper()}"}}
     created_form = form_service.forms().create(body=form_body).execute()
     
     requests = [
         {"createItem": {"item": {"title": "Full Name", "questionItem": {"question": {"required": True, "textQuestion": {}}}}, "location": {"index": 0}}},
         {"createItem": {"item": {"title": "Student Email", "questionItem": {"question": {"required": True, "textQuestion": {}}}}, "location": {"index": 1}}},
-        {"createItem": {"item": {"title": "Upload your work", "questionItem": {"question": {"required": True, "fileUploadQuestion": {"folderId": folder_id}}}}, "location": {"index": 2}}}
+        # The crucial fix: Asking for a Drive Link instead of native file upload
+        {"createItem": {"item": {"title": "Upload your work (Paste Google Drive Link here)", "questionItem": {"question": {"required": True, "textQuestion": {}}}}, "location": {"index": 2}}}
     ]
     form_service.forms().batchUpdate(formId=created_form['formId'], body={"requests": requests}).execute()
     return created_form['responderUri']
@@ -77,7 +79,7 @@ def main():
         # 1. Handle Form Generation
         if row.get("Form_Generation_Status") == "READY":
             try:
-                form_url = create_new_assessment_form(row["Topic_Focus"], row["Assessment_Type"], form_service, "17xQylOjEy2zVRRLOUChKxAGKmXM1m0hY")
+                form_url = create_new_assessment_form(row["Topic_Focus"], row["Assessment_Type"], form_service)
                 sheet.update_cell(index, headers.index("Form_URL") + 1, form_url)
                 sheet.update_cell(index, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
                 print(f"Generated form for {row['Topic_Focus']}")
@@ -93,15 +95,19 @@ def main():
         
         contents = [get_prompt(curr, dll_tmpl, row.get("Assessment_Type"), row.get("Score") or 0, row.get("Digital_Answers", ""))]
         
-        # Image Processing
-        file_id = str(row.get("Log_ID", "")).strip()
-        if file_id:
+        # Image Processing with Regex Link Extractor
+        raw_link = str(row.get("Log_ID", "")).strip()
+        if raw_link:
             try:
+                match = re.search(r'/d/([a-zA-Z0-9_-]+)', raw_link)
+                file_id = match.group(1) if match else raw_link
+                
                 fh = io.BytesIO()
                 MediaIoBaseDownload(fh, drive_service.files().get_media(fileId=file_id)).next_chunk()
                 fh.seek(0)
                 contents.append(Image.open(fh))
-            except Exception as e: print(f"Image error: {e}")
+            except Exception as e: 
+                print(f"Image error (Check if link is accessible): {e}")
 
         # AI Processing
         try:
