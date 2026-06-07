@@ -102,6 +102,14 @@ def get_lesson_generation_prompt(curr, tmpl, strand_focus):
     CRITICAL CONTEXT: You MUST tailor the examples, business scenarios, and tone specifically for a student in the {strand_focus} strand. Ensure the real-world applications make sense for their specialization.
     
     1. LECTURE: Write a clear, engaging lecture based on the DepEd DLL Objectives: {tmpl['I_OBJECTIVES']} and Procedures: {tmpl['IV_PROCEDURES']['Mastery']}. Make it easy for a student to read independently.
+    
+    🛑 FORMATTING MANDATE FOR THE LECTURE: 
+    Google Forms requires plain text, so you MUST structure the `lecture_content` string beautifully using spacing:
+    - Use double line breaks (\\n\\n) to create distinct, bite-sized paragraphs.
+    - Use ALL CAPS for section headers (e.g., INTRODUCTION, CORE CONCEPT, {strand_focus} APPLICATION).
+    - Use unicode bullet points (•) for lists, key takeaways, or step-by-step procedures.
+    - NEVER output a single, giant wall of text. Break it up so it is easy on the eyes.
+    
     2. QUIZ: Generate a 5-item multiple choice quiz based on the lecture to test their understanding. Format it clearly with A, B, C, D options.
     
     Return as JSON matching the schema.
