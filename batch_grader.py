@@ -21,7 +21,6 @@ class GradingSchema(BaseModel):
 
 def get_google_services():
     creds_dict = json.loads(os.environ.get('GOOGLE_CREDENTIALS_JSON'))
-    # Added forms.body scope
     scopes = [
         "https://spreadsheets.google.com/feeds", 
         "https://www.googleapis.com/auth/drive",
@@ -34,11 +33,28 @@ def get_google_services():
         build('forms', 'v1', credentials=creds)
     )
 
+def get_prompt(curr, tmpl, assessment_type, score, typed_text):
+    is_struggling = score < curr.get("mastery_threshold", 75)
+    instruction = f"REMEDIATION: Provide scaffolding based on: {' -> '.join(curr.get('scaffolding_steps', ['Review', 'Practice', 'Apply']))}" if is_struggling else "ENRICHMENT: Provide a complex, real-world business scenario."
+    exam_instruction = "Generate a 50-item major exam. STRICT TOS: 60% Easy, 30% Average, 10% Difficult." if assessment_type == "periodical" else ""
+    
+    return f"""
+    You are an expert ABM Teacher at Sagkahan National High School.
+    Competency: {curr['learning_competency']}
+    Assessment Type: {assessment_type.upper()}
+    {instruction}
+    {exam_instruction}
+    Use official DepEd DLL format:
+    1. OBJECTIVES: {tmpl['I_OBJECTIVES']}
+    2. PROCEDURES: {tmpl['IV_PROCEDURES']['Mastery']}
+    3. EVALUATION: {tmpl['IV_PROCEDURES']['Evaluation']}
+    Student Response: {typed_text}
+    Return as JSON: {{"score": integer, "lesson": "string", "mcq_quiz": []}}
+    """
+
 def create_new_assessment_form(comp_code, assessment_type, form_service, folder_id):
     form_body = {"info": {"title": f"Assessment: {comp_code} - {assessment_type.upper()}"}}
     created_form = form_service.forms().create(body=form_body).execute()
-    
-    # Add standardized fields
     requests = [
         {"createItem": {"item": {"title": "Full Name", "questionItem": {"question": {"required": True, "textQuestion": {}}}}, "location": {"index": 0}}},
         {"createItem": {"item": {"title": "Student Email", "questionItem": {"question": {"required": True, "textQuestion": {}}}}, "location": {"index": 1}}},
@@ -54,33 +70,47 @@ def main():
     
     sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Skill_Analytics")
     headers = sheet.row_values(1)
-    
-    # 1. Check Class Mastery (90% rule)
     all_records = sheet.get_all_records()
-    mastered_count = sum(1 for r in all_records if r.get("Remediation_Status") == "Mastered")
-    is_class_unlocked = (mastered_count / len(all_records)) >= 0.9 if all_records else False
 
     for index, row in enumerate(all_records, start=2):
-        # 2. Automated Form Generation Trigger
+        # 1. Handle Form Generation
         if row.get("Form_Generation_Status") == "READY":
             form_url = create_new_assessment_form(row["Topic_Focus"], row["Assessment_Type"], form_service, "YOUR_DRIVE_FOLDER_ID")
             sheet.update_cell(index, headers.index("Form_URL") + 1, form_url)
             sheet.update_cell(index, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
             continue
 
+        # 2. Handle Grading
         if str(row.get("Remediation_Status", "")).strip() != "Pending": continue
 
-        # Processing Logic (Scaffolding vs Enrichment)
         comp_code = row.get("Topic_Focus")
         curr = curr_data.get(comp_code)
         if not curr: continue
         
         contents = [get_prompt(curr, dll_tmpl, row.get("Assessment_Type"), row.get("Score") or 0, row.get("Digital_Answers", ""))]
         
-        # ... (Image handling logic remains the same)
+        # Image Processing
+        file_id = str(row.get("Log_ID", "")).strip()
+        if file_id:
+            try:
+                fh = io.BytesIO()
+                MediaIoBaseDownload(fh, drive_service.files().get_media(fileId=file_id)).next_chunk()
+                fh.seek(0)
+                contents.append(Image.open(fh))
+            except Exception as e: print(f"Image error: {e}")
 
         # AI Processing
-        # ... (API call remains the same)
+        res = gen_client.models.generate_content(
+            model='gemini-2.0-flash', 
+            contents=contents,
+            config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=GradingSchema)
+        )
+        data = json.loads(res.text)
+        
+        # Update Sheet
+        sheet.update_cell(index, headers.index("Score") + 1, data['score'])
+        sheet.update_cell(index, headers.index("Remediation") + 1, data['lesson'])
+        sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data['score'] >= curr.get("mastery_threshold", 75) else "Needs Review")
         
         time.sleep(45)
 
