@@ -24,26 +24,22 @@ def get_google_services():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds), build('drive', 'v3', credentials=creds)
 
-def get_prompt(curr, tmpl, assessment_type, typed_text):
-    # Tiered Assessment & DepEd TOS Logic
-    scaffold = f"Scaffolding steps: {' -> '.join(curr.get('scaffolding_steps', ['Review', 'Practice', 'Apply']))}" if assessment_type == "assignment" else ""
+def get_prompt(curr, tmpl, assessment_type, score, typed_text):
+    # Differentiate logic: Scaffolding vs. Enrichment
+    is_struggling = score < curr.get("mastery_threshold", 75)
     
-    # 60-30-10 DepEd Rule Enforcement
-    exam_instruction = ""
-    if assessment_type == "periodical":
-        exam_instruction = (
-            "Generate a 50-item major exam. STRICT TOS DISTRIBUTION: "
-            "30 items (60%) EASY (Knowledge/Remembering), "
-            "15 items (30%) AVERAGE (Understanding/Applying), "
-            "5 items (10%) DIFFICULT (Analyzing/Evaluating). "
-            "Ensure item-analysis-ready phrasing and include an Answer Key."
-        )
+    if is_struggling:
+        instruction = f"REMEDIATION: Provide step-by-step scaffolding based on: {' -> '.join(curr.get('scaffolding_steps', ['Review', 'Practice', 'Apply']))}"
+    else:
+        instruction = "ENRICHMENT: The student has mastered this. Provide a complex, real-world business scenario for extension."
+
+    exam_instruction = "Generate a 50-item major exam. STRICT TOS: 60% Easy, 30% Average, 10% Difficult." if assessment_type == "periodical" else ""
 
     return f"""
     You are an expert ABM Teacher at Sagkahan National High School.
     Competency: {curr['learning_competency']}
     Assessment Type: {assessment_type.upper()}
-    {scaffold}
+    {instruction}
     {exam_instruction}
 
     Use official DepEd DLL format:
@@ -62,8 +58,15 @@ def main():
     
     sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Skill_Analytics")
     headers = sheet.row_values(1)
+    
+    # 1. Check Class Mastery (90% threshold rule)
+    # Assumes column 'Remediation_Status' is at index 7 (G)
+    all_records = sheet.get_all_records()
+    mastered_count = sum(1 for r in all_records if r.get("Remediation_Status") == "Mastered")
+    class_mastery_pct = mastered_count / len(all_records) if all_records else 0
+    is_class_unlocked = class_mastery_pct >= 0.9
 
-    for index, row in enumerate(sheet.get_all_records(), start=2):
+    for index, row in enumerate(all_records, start=2):
         if str(row.get("Remediation_Status", "")).strip() != "Pending": continue
 
         comp_code = row.get("Topic_Focus")
@@ -71,10 +74,13 @@ def main():
         file_id = str(row.get("Log_ID", "")).strip()
         typed_text = str(row.get("Digital_Answers", "")).strip()
         assessment_type = str(row.get("Assessment_Type", "daily_quiz")).strip()
+        current_score = row.get("Score") or 0
         
         if not curr: continue
 
-        contents = [get_prompt(curr, dll_tmpl, assessment_type, typed_text)]
+        # 2. Logic Branching: Lock vs Unlock
+        # If LOCKED, system forces remediation. If UNLOCKED, teacher can deploy new content.
+        contents = [get_prompt(curr, dll_tmpl, assessment_type, current_score, typed_text)]
         
         if file_id:
             try:
