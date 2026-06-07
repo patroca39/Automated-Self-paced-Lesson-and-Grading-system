@@ -17,15 +17,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install Stable Dependencies
         run: |
-          pip install google-generativeai requests gspread oauth2client
+          pip install google-generativeai requests gspread oauth2client google-api-python-client pillow
 
       - name: Create Google Credentials File
+        env:
+          # Safely load the JSON into an environment variable first to preserve double quotes
+          GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: |
-          echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" > service_account.json
+          echo "$GOOGLE_CREDS" > service_account.json
 
       - name: Execute Batch Grader Script
         env:
