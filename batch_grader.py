@@ -16,8 +16,7 @@ from google.genai import types
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 # TODO: Paste the ID of your Master Template Google Form below
-# (Make sure this template only has "Full Name" and "Upload your work" questions)
-MASTER_TEMPLATE_ID = "1MoDMyVyMJFMIZy6HVMsVoF0G7Zz_-oHU6L_Gciw88C4" 
+MASTER_TEMPLATE_ID = "PASTE_YOUR_TEMPLATE_ID_HERE" 
 
 class GradingSchema(BaseModel):
     score: int
@@ -47,16 +46,42 @@ def get_google_services():
         build('forms', 'v1', credentials=creds)
     )
 
+# 🚀 NEW: The AI Armor Engine (Upgraded from your reference script)
+def call_gemini_with_retry(contents, schema_class, retries=4):
+    for attempt in range(retries):
+        try:
+            print(f"Calling Gemini Core (Attempt {attempt + 1}/{retries})...")
+            res = gen_client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=schema_class
+                )
+            )
+            
+            # Returns data depending on if it's the Grading or Lesson schema
+            if hasattr(schema_class, 'model_validate_json'):
+                return schema_class.model_validate_json(res.text)
+            else:
+                return json.loads(res.text)
+                
+        except Exception as e:
+            print(f"🛑 GenAI System Exception (Attempt {attempt + 1}): {e}")
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
+                print("Quota exceeded. Triggering 50-second cooldown block...")
+                time.sleep(50) # Gives the Free Tier ample time to reset
+            else:
+                time.sleep(35)
+                
+    print("❌ Gemini interface drop-out. Max retries reached.")
+    return None
+
 def fetch_from_item_bank(sheet_client, comp_code, strand_focus, required_count=5):
     bank_sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
     all_items = bank_sheet.get_all_records()
-    
-    # Filter by BOTH Topic and Strand
     matched_items = [item for item in all_items if item.get('Topic_Focus') == comp_code and str(item.get('Strand_Focus', '')).strip().upper() == str(strand_focus).strip().upper()]
-    
-    # If we have enough questions banked, return them as a list of dictionaries to build radio buttons
-    if len(matched_items) >= required_count:
-        return matched_items[:required_count]
+    if len(matched_items) >= required_count: return matched_items[:required_count]
     return None
 
 def save_to_item_bank(sheet_client, comp_code, strand_focus, mcq_list):
@@ -98,32 +123,24 @@ def get_grading_prompt(curr, tmpl, assessment_type, score, typed_text, strand_fo
     """
 
 def create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, template_id, banked_questions=None):
-    # 1. Duplicate your Master Template
     new_form = drive_service.files().copy(
         fileId=template_id,
         body={"name": f"Module: {comp_code} - {lesson_data.lesson_title}"} if lesson_data else {"name": f"Module: {comp_code}"}
     ).execute()
     new_form_id = new_form['id']
     
-    # 2. Inject the AI Lecture at the very top (Index 0)
     requests = []
     if lesson_data:
         requests.append({
             "createItem": {
-                "item": {
-                    "title": "📖 Reading Module", 
-                    "description": lesson_data.lecture_content
-                }, 
+                "item": {"title": "📖 Reading Module", "description": lesson_data.lecture_content}, 
                 "location": {"index": 0}
             }
         })
     
-    # 3. Generate REAL Radio Buttons for the 5 Quiz Questions
-    # Decide source: AI generated (LessonSchema objects) or Banked (Dictionaries)
     questions_to_build = banked_questions if banked_questions else lesson_data.quiz
     
     for i, q in enumerate(questions_to_build):
-        # Handle the slight data structure difference between Banked Dicts and AI Pydantic Objects
         q_text = q.get('Question_Text') if banked_questions else q.question
         opt_a = q.get('Option_A') if banked_questions else q.option_a
         opt_b = q.get('Option_B') if banked_questions else q.option_b
@@ -139,22 +156,15 @@ def create_new_assessment_form(comp_code, lesson_data, drive_service, form_servi
                             "required": True,
                             "choiceQuestion": {
                                 "type": "RADIO",
-                                "options": [
-                                    {"value": f"A) {opt_a}"},
-                                    {"value": f"B) {opt_b}"},
-                                    {"value": f"C) {opt_c}"},
-                                    {"value": f"D) {opt_d}"}
-                                ]
+                                "options": [{"value": f"A) {opt_a}"}, {"value": f"B) {opt_b}"}, {"value": f"C) {opt_c}"}, {"value": f"D) {opt_d}"}]
                             }
                         }
                     }
                 },
-                # Places them sequentially right after the Reading block
                 "location": {"index": i + 1 if lesson_data else i} 
             }
         })
 
-    # 4. Execute the build
     if requests:
         form_service.forms().batchUpdate(formId=new_form_id, body={"requests": requests}).execute()
         
@@ -168,14 +178,16 @@ def main():
     
     sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Skill_Analytics")
     
-    # Bulletproof fix for duplicate/blank headers
     raw_data = sheet.get_all_values()
     headers = raw_data[0]
     all_records = [dict(zip(headers, row)) for row in raw_data[1:] if any(row)]
 
     for index, row in enumerate(all_records, start=2):
-        comp_code = row.get("Topic_Focus")
-        strand_focus = str(row.get("Strand_Focus", "ABM")).strip() # Defaults to ABM if blank
+        # Format fix: Removes the ABM_BM11 prefix if you accidentally pasted it in the sheet
+        raw_comp_code = str(row.get("Topic_Focus", ""))
+        comp_code = raw_comp_code.replace("ABM_BM11", "") 
+        
+        strand_focus = str(row.get("Strand_Focus", "ABM")).strip()
         curr = curr_data.get(comp_code)
         
         if not curr: continue
@@ -183,39 +195,29 @@ def main():
         # 1. Handle MODULE GENERATION Phase
         if row.get("Form_Generation_Status") == "READY":
             try:
-                # Check Item Bank FIRST
                 banked_questions = fetch_from_item_bank(sheet_client, comp_code, strand_focus)
-                
                 lesson_data = None
+                
                 if banked_questions:
                     print(f"Pulled {comp_code} ({strand_focus}) questions from Item Bank.")
-                    # Still need the lecture, so ask AI just for the lecture (optional optimization to bank lectures too)
                     gen_prompt = get_lesson_generation_prompt(curr, dll_tmpl, strand_focus)
-                    res = gen_client.models.generate_content(
-                        model='gemini-2.0-flash', 
-                        contents=gen_prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=LessonSchema)
-                    )
-                    lesson_data = LessonSchema.model_validate_json(res.text)
-                    form_url = create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, MASTER_TEMPLATE_ID, banked_questions)
-                
-                else:
-                    # Not in bank, generate full module
-                    gen_prompt = get_lesson_generation_prompt(curr, dll_tmpl, strand_focus)
-                    res = gen_client.models.generate_content(
-                        model='gemini-2.0-flash', 
-                        contents=gen_prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=LessonSchema)
-                    )
-                    lesson_data = LessonSchema.model_validate_json(res.text)
                     
-                    # Save the new questions to the bank
+                    # 🚀 UPGRADED: Uses the retry wrapper
+                    lesson_data = call_gemini_with_retry(gen_prompt, LessonSchema)
+                    if not lesson_data: continue
+                    
+                    form_url = create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, MASTER_TEMPLATE_ID, banked_questions)
+                else:
+                    gen_prompt = get_lesson_generation_prompt(curr, dll_tmpl, strand_focus)
+                    
+                    # 🚀 UPGRADED: Uses the retry wrapper
+                    lesson_data = call_gemini_with_retry(gen_prompt, LessonSchema)
+                    if not lesson_data: continue
+                    
                     save_to_item_bank(sheet_client, comp_code, strand_focus, lesson_data.quiz)
                     print(f"Generated new {strand_focus} questions and saved to Item Bank for {comp_code}.")
-                    
                     form_url = create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, MASTER_TEMPLATE_ID)
                 
-                # Update Sheet
                 sheet.update_cell(index, headers.index("Form_URL") + 1, form_url)
                 sheet.update_cell(index, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
                 
@@ -227,13 +229,11 @@ def main():
         
         contents = [get_grading_prompt(curr, dll_tmpl, row.get("Assessment_Type"), row.get("Score") or 0, row.get("Digital_Answers", ""), strand_focus)]
         
-        # Image Processing with Regex that catches both standard links and native Form uploads
         raw_link = str(row.get("Log_ID", "")).strip()
         if raw_link:
             try:
                 match = re.search(r'(?:/d/|id=)([a-zA-Z0-9_-]+)', raw_link)
                 file_id = match.group(1) if match else raw_link
-                
                 fh = io.BytesIO()
                 MediaIoBaseDownload(fh, drive_service.files().get_media(fileId=file_id)).next_chunk()
                 fh.seek(0)
@@ -241,24 +241,20 @@ def main():
             except Exception as e: 
                 print(f"Image error: {e}")
 
-        # AI Processing
+        # 🚀 UPGRADED: Uses the retry wrapper
+        data = call_gemini_with_retry(contents, GradingSchema)
+        if not data: continue
+        
         try:
-            res = gen_client.models.generate_content(
-                model='gemini-2.0-flash', 
-                contents=contents,
-                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=GradingSchema)
-            )
-            data = json.loads(res.text)
-            
-            # Update Sheet
-            sheet.update_cell(index, headers.index("Score") + 1, data['score'])
-            sheet.update_cell(index, headers.index("Remediation") + 1, data['lesson'])
-            sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data['score'] >= curr.get("mastery_threshold", 75) else "Needs Review")
+            sheet.update_cell(index, headers.index("Score") + 1, data.get('score', 0))
+            sheet.update_cell(index, headers.index("Remediation") + 1, data.get('lesson', ''))
+            sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data.get('score', 0) >= curr.get("mastery_threshold", 75) else "Needs Review")
             print(f"Graded row {index} successfully. Module cycle complete.")
         except Exception as e:
             print(f"Grading/Update Error: {e}")
-        
-        time.sleep(45)
+            
+        # Hard delay at the end of the loop to ensure baseline rate compliance
+        time.sleep(15)
 
 if __name__ == '__main__':
     main()
