@@ -1,0 +1,19 @@
+{
+  "dll_template": {
+    "I_OBJECTIVES": "Specify learning objectives based on competency.",
+    "II_CONTENT": "Subject matter and lesson topic.",
+    "IV_PROCEDURES": {
+      "Review": "Review previous lesson.",
+      "Purpose": "Establish the purpose of the lesson.",
+      "Examples": "Present instances of the new lesson.",
+      "Concepts_1": "Discuss new concepts and skills #1.",
+      "Concepts_2": "Discuss new concepts and skills #2.",
+      "Mastery": "Developing mastery (Leads to Formative Assessment).",
+      "Application": "Finding practical applications of concepts.",
+      "Generalization": "Making generalizations and abstractions.",
+      "Evaluation": "Evaluating learning."
+    },
+    "V_REMARKS": "Record of student progress.",
+    "VI_REFLECTION": "Reflection on teaching strategies."
+  }
+}
