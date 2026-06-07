@@ -15,7 +15,6 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-# TODO: Paste the ID of your Master Template Google Form below
 MASTER_TEMPLATE_ID = "1MoDMyVyMJFMIZy6HVMsVoF0G7Zz_-oHU6L_Gciw88C4" 
 
 class GradingSchema(BaseModel):
@@ -46,13 +45,13 @@ def get_google_services():
         build('forms', 'v1', credentials=creds)
     )
 
-# 🚀 The AI Armor Engine: Now running on gemini-2.5-flash
+# 🚀 The AI Armor Engine
 def call_gemini_with_retry(contents, schema_class, retries=4):
     for attempt in range(retries):
         try:
             print(f"Calling Gemini Core (Attempt {attempt + 1}/{retries})...")
             res = gen_client.models.generate_content(
-                model='gemini-2.5-flash', # <--- UPDATED TO MATCH PAPER PARANOIA
+                model='gemini-2.5-flash',
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -129,10 +128,16 @@ def create_new_assessment_form(comp_code, lesson_data, drive_service, form_servi
     new_form_id = new_form['id']
     
     requests = []
+    
+    # 🚀 THE CRITICAL FIX IS HERE
     if lesson_data:
         requests.append({
             "createItem": {
-                "item": {"title": "📖 Reading Module", "description": lesson_data.lecture_content}, 
+                "item": {
+                    "title": "📖 Reading Module", 
+                    "description": lesson_data.lecture_content,
+                    "textItem": {} 
+                }, 
                 "location": {"index": 0}
             }
         })
@@ -182,7 +187,6 @@ def main():
     all_records = [dict(zip(headers, row)) for row in raw_data[1:] if any(row)]
 
     for index, row in enumerate(all_records, start=2):
-        # Format fix: Removes the ABM_BM11 prefix if pasted from sheet
         raw_comp_code = str(row.get("Topic_Focus", ""))
         comp_code = raw_comp_code.replace("ABM_BM11", "") 
         strand_focus = str(row.get("Strand_Focus", "ABM")).strip()
@@ -221,14 +225,13 @@ def main():
             continue
 
         # ---------------------------------------------------------
-        # 2. Handle GRADING Phase (Optimized Image/Text Logic)
+        # 2. Handle GRADING Phase
         # ---------------------------------------------------------
         if str(row.get("Remediation_Status", "")).strip() != "Pending": continue
         
         digital_answers = str(row.get("Digital_Answers", "")).strip()
         raw_link = str(row.get("Log_ID", "")).strip()
         
-        # LOGIC CHECK: If both are empty, there is nothing to grade! Skip it.
         if not digital_answers and not raw_link:
             print(f"Skipping Row {index}: No digital answers or image link provided.")
             continue
@@ -236,7 +239,6 @@ def main():
         print(f"Grading Row {index} for {comp_code}...")
         contents = [get_grading_prompt(curr, dll_tmpl, row.get("Assessment_Type"), row.get("Score") or 0, digital_answers, strand_focus)]
         
-        # IMAGE LOGIC CHECK: Only process Google Drive if a link actually exists
         if raw_link:
             try:
                 print(" -> Image link detected. Downloading from Drive...")
@@ -252,7 +254,6 @@ def main():
         else:
             print(" -> No image link detected. Executing text-only grading.")
 
-        # Trigger Gemini
         data = call_gemini_with_retry(contents, GradingSchema)
         if not data: continue
         
@@ -264,7 +265,6 @@ def main():
         except Exception as e:
             print(f"Grading/Update Error: {e}")
             
-        # Hard delay at the end of the loop to ensure baseline rate compliance
         time.sleep(15)
 
 if __name__ == '__main__':
