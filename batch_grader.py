@@ -20,9 +20,9 @@ SPREADSHEET_NAME = "Business_Math_Master_Gradebook"
 WORKSHEET_NAME = "Skill_Analytics"
 BASEROW_URL = "https://api.baserow.io/api/database/rows/table/1012002/"
 
+# Use Flash 2.0 (more stable for batch)
 gen_client = genai.Client(api_key=GEMINI_KEY)
 
-# --- PYDANTIC SCHEMA ENFORCEMENT ---
 class GradingSchema(BaseModel):
     score: int
     lesson: str
@@ -30,7 +30,6 @@ class GradingSchema(BaseModel):
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 def get_google_services():
-    """Authenticates using in-memory environment variables."""
     creds_dict = json.loads(os.environ.get('GOOGLE_CREDENTIALS_JSON'))
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPES)
     sheet_client = gspread.authorize(creds)
@@ -38,7 +37,6 @@ def get_google_services():
     return sheet_client, drive_service
 
 def download_image(drive_service, file_id):
-    """Downloads the image from Google Drive into memory."""
     request = drive_service.files().get_media(fileId=file_id)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
@@ -58,29 +56,19 @@ def main():
 
     all_rows = sheet.get_all_records()
     print(f"Total rows found in sheet: {len(all_rows)}")
-    
-    # Grab headers early so we can dynamically find columns
     headers_row = sheet.row_values(1)
 
     for index, row in enumerate(all_rows, start=2):
         status = str(row.get("Remediation_Status", "")).strip()
-
-        # Only process rows tagged for grading
-        if status != "Pending":
-            continue
+        if status != "Pending": continue
 
         student_id = row.get("Student_ID", "unknown")
         file_id = str(row.get("Log_ID", "")).strip()
         competency = row.get("Topic_Focus", "ABM_BM11BS-Ig-1")
         strand = str(row.get("Strand_Focus", "BEC")).strip() or "BEC"
 
-        print(f"Processing student {student_id} (File: {file_id})...")
-
-        # SAFETY NET: Skip if no image ID was provided by n8n
         if not file_id:
-            print(f"Skipping {student_id}: No Log_ID found in the sheet.")
-            try:
-                sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "Missing ID")
+            try: sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "Missing ID")
             except: pass
             continue
 
@@ -91,31 +79,15 @@ def main():
             sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "Image Error")
             continue
 
-        # Check Baserow for archived lessons
-        headers = {"Authorization": f"Token {BASEROW_KEY}"}
-        archived_lesson = ""
-        try:
-            search_url = f"{BASEROW_URL}?user_field_names=true&filter__field_Competency_Code__equal={competency}"
-            res = requests.get(search_url, headers=headers, timeout=5).json()
-            if res.get('results'): 
-                archived_lesson = res['results'][0]['Lesson_Content_4As']
-        except Exception:
-            pass
-
-        # Multimodal Prompt
-        prompt = f"""
-        Analyze the handwritten or typed math in the provided image for competency {competency}.
-        Score the work (0-100). If the score < 75, generate a specific 4As lesson plan (### 1. Activity, ### 2. Analysis, ### 3. Abstraction, ### 4. Application) for strand {strand}.
-        """
-
+        # --- HARDENED EXPONENTIAL BACKOFF LOGIC ---
         gemini_success = False
-        score, lesson, final_status = 0, "", "Needs Review"
+        score, lesson = 0, ""
         
-        # Call Gemini API with retries
-        for attempt in range(3):
+        for attempt in range(5):
             try:
+                prompt = f"Analyze the math in this image for competency {competency}. Score (0-100). If <75, provide 4As remediation for {strand}."
                 response = gen_client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-2.0-flash',
                     contents=[prompt, student_image],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -124,32 +96,27 @@ def main():
                     )
                 )
                 gemini_data = json.loads(response.text)
-                
                 score = int(gemini_data.get("score", 0))
                 lesson = gemini_data.get("lesson", "").strip()
-                final_status = "Mastered" if score >= 75 else "Needs Review"
                 gemini_success = True
                 break
-            except Exception as gemini_err:
-                print(f"Gemini attempt {attempt + 1} failed: {gemini_err}. Retrying...")
-                time.sleep(10)
+            except Exception as e:
+                # Mirroring Paper Paranoia: Aggressive wait time on failure
+                wait_time = (attempt + 1) * 60 
+                print(f"🛑 API busy. Waiting {wait_time}s (Attempt {attempt+1}/5). Error: {e}")
+                time.sleep(wait_time)
 
-        # Write results back to Google Sheets
-        remediation_content = archived_lesson or lesson
-        
-        try:
-            if gemini_success:
-                sheet.update_cell(index, headers_row.index("Score") + 1, score)
-                sheet.update_cell(index, headers_row.index("Remediation") + 1, remediation_content)
-                sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, final_status)
-                print(f"Successfully graded {student_id}. Score: {score}")
-            else:
-                sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "AI Error")
-        except ValueError as cell_err:
-            print(f"Column mapping error: {cell_err}")
+        # Write results
+        if gemini_success:
+            sheet.update_cell(index, headers_row.index("Score") + 1, score)
+            sheet.update_cell(index, headers_row.index("Remediation") + 1, lesson)
+            sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "Mastered" if score >= 75 else "Needs Review")
+        else:
+            sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "AI Error")
 
-        # Strict 5-second cooldown to respect Google APIs
-        time.sleep(5)
+        # Increased cooldown to protect your daily quota
+        print("Cooling down 45s...")
+        time.sleep(45) 
 
     print("Batch grading completed.")
 
