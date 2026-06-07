@@ -46,13 +46,13 @@ def get_google_services():
         build('forms', 'v1', credentials=creds)
     )
 
-# 🚀 The AI Armor Engine: Catches 429 Errors and paces the requests
+# 🚀 The AI Armor Engine: Now running on gemini-2.5-flash
 def call_gemini_with_retry(contents, schema_class, retries=4):
     for attempt in range(retries):
         try:
             print(f"Calling Gemini Core (Attempt {attempt + 1}/{retries})...")
             res = gen_client.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-2.5-flash', # <--- UPDATED TO MATCH PAPER PARANOIA
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
