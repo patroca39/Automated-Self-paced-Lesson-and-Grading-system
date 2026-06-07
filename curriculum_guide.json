@@ -1,52 +1,74 @@
 {
   "ABM_BM11": {
     "FO-Ia-1": {
-      "topic": "Fundamental Operations on Fractions/Decimals",
-      "content": "Fundamental Operations on Fractions, Decimals, Percentage",
-      "content_standard": "The learners demonstrate an understanding of: 1. fractions 2. decimals and percentage",
-      "performance_standard": "The learners are able to: 1. Perform operations: addition, subtraction, multiplication and division accurately 2. Solve problems involving fractions, decimals and percent related to business",
+      "topic": "Fundamental Operations",
+      "content_standard": "Fractions, decimals, and percentage",
+      "performance_standard": "Perform operations accurately and solve business-related problems",
       "learning_competency": "Perform fundamental operations on fractions and decimals.",
       "mastery_threshold": 75
     },
     "FO-Ia-2": {
-      "topic": "Fundamental Operations on Fractions/Decimals",
-      "content": "Fundamental Operations on Fractions, Decimals, Percentage",
-      "content_standard": "The learners demonstrate an understanding of: 1. fractions 2. decimals and percentage",
-      "performance_standard": "The learners are able to: 1. Perform operations: addition, subtraction, multiplication and division accurately",
+      "topic": "Fundamental Operations",
+      "content_standard": "Fractions, decimals, and percentage",
+      "performance_standard": "Convert between fraction, decimal, and percent forms",
       "learning_competency": "Express fractions to decimals and percent forms and vice versa.",
+      "mastery_threshold": 75
+    },
+    "RP-Ie-1": {
+      "topic": "Ratio and Proportion",
+      "content_standard": "Ratio and Rate",
+      "performance_standard": "Compare and differentiate ratio and rate",
+      "learning_competency": "Compare and differentiate ratio and rate.",
+      "mastery_threshold": 75
+    },
+    "RP-If-4": {
+      "topic": "Ratio and Proportion",
+      "content_standard": "Proportion",
+      "performance_standard": "Solve problems involving direct, inverse, and partitive proportion",
+      "learning_competency": "Solve problems involving direct, inverse and partitive proportion.",
       "mastery_threshold": 75
     },
     "BS-Ig-1": {
       "topic": "Buying and Selling",
-      "content": "Buying and Selling",
-      "content_standard": "The learners demonstrate an understanding of: 1. mark-on, mark-down and mark-up 2. profit margin 3. break-even point",
-      "performance_standard": "The learners are able to: 1. Analyze and solve problems on mark-up, mark-down, and mark-on, and compute profit margin and break-even point",
+      "content_standard": "Mark-on, mark-down, mark-up",
+      "performance_standard": "Analyze and solve problems on mark-up, mark-down, and mark-on",
       "learning_competency": "Differentiate Mark-on, Mark-down and Mark-up.",
       "mastery_threshold": 75
     },
     "BS-Ij-8": {
-      "topic": "Buying and Selling",
-      "content": "Buying and Selling",
-      "content_standard": "The learners demonstrate an understanding of break-even point",
-      "performance_standard": "The learners are able to illustrate how to determine break-even point",
+      "topic": "Break-Even Analysis",
+      "content_standard": "Break-even point",
+      "performance_standard": "Illustrate how to determine break-even point",
       "learning_competency": "Define break-even; illustrate how to determine break-even point.",
       "mastery_threshold": 80
     },
     "SW-IIc-1": {
       "topic": "Salaries and Wages",
-      "content": "Salaries and Wages",
-      "content_standard": "The learners demonstrate an understanding of salary, wage, income, and benefits",
-      "performance_standard": "The learners are able to compute gross and net earnings",
+      "content_standard": "Salary, wage, income, benefits",
+      "performance_standard": "Compute gross and net earnings",
       "learning_competency": "Define salary, wage, income, benefits.",
       "mastery_threshold": 75
     },
-    "PAD-IIh-5": {
-      "topic": "Presentation and Analysis of Business Data",
-      "content": "Presentation and Analysis of Business Data",
-      "content_standard": "The learners demonstrate an understanding of measures of central tendency and variability",
-      "performance_standard": "The learners are able to analyze and interpret business data using statistical tools",
-      "learning_competency": "Analyze and interpret the data presented in the table using measures of central tendency and variability.",
+    "SW-IId-2": {
+      "topic": "Salaries and Wages",
+      "content_standard": "Gross and Net Earnings",
+      "performance_standard": "Compute gross and net earnings including deductions",
+      "learning_competency": "Compute gross and net earnings.",
       "mastery_threshold": 80
+    },
+    "PAD-IIh-5": {
+      "topic": "Business Data Presentation",
+      "content_standard": "Measures of central tendency and variability",
+      "performance_standard": "Analyze and interpret business data using statistical tools",
+      "learning_competency": "Analyze and interpret data using measures of central tendency.",
+      "mastery_threshold": 80
+    },
+    "PAD-IIj-11": {
+      "topic": "Business Data Presentation",
+      "content_standard": "Software applications for data",
+      "performance_standard": "Use software to compute and present graphical representations",
+      "learning_competency": "Use software (MS Excel, etc.) to compute and present graphical business data.",
+      "mastery_threshold": 85
     }
   }
 }
