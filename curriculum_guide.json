@@ -5,6 +5,8 @@
       "content_standard": "Fractions, decimals, and percentage",
       "performance_standard": "Perform operations accurately and solve business-related problems",
       "learning_competency": "Perform fundamental operations on fractions and decimals.",
+      "cognitive_level": "Easy",
+      "weight": 0.1,
       "scaffolding_steps": ["Review place value", "Guided decimal alignment", "Independent calculation"],
       "dll_fields": {
         "objectives": "Perform operations on fractions and decimals.",
@@ -18,6 +20,8 @@
       "content_standard": "Fractions, decimals, and percentage",
       "performance_standard": "Convert between fraction, decimal, and percent forms",
       "learning_competency": "Express fractions to decimals and percent forms and vice versa.",
+      "cognitive_level": "Easy",
+      "weight": 0.1,
       "scaffolding_steps": ["Review fraction-to-decimal logic", "Interactive conversion exercises", "Real-world business rate conversion"],
       "dll_fields": {
         "objectives": "Convert fractions, decimals, and percentages.",
@@ -31,6 +35,8 @@
       "content_standard": "Ratio and Rate",
       "performance_standard": "Compare and differentiate ratio and rate",
       "learning_competency": "Compare and differentiate ratio and rate.",
+      "cognitive_level": "Easy",
+      "weight": 0.1,
       "scaffolding_steps": ["Define ratio", "Identify rate vs ratio", "Apply to business rates"],
       "dll_fields": {
         "objectives": "Differentiate ratio and rate in business contexts.",
@@ -44,6 +50,8 @@
       "content_standard": "Proportion",
       "performance_standard": "Solve problems involving direct, inverse, and partitive proportion",
       "learning_competency": "Solve problems involving direct, inverse and partitive proportion.",
+      "cognitive_level": "Average",
+      "weight": 0.1,
       "scaffolding_steps": ["Setup proportion equations", "Guided solving", "Real-world proportion word problems"],
       "dll_fields": {
         "objectives": "Solve direct, inverse, and partitive proportion.",
@@ -57,6 +65,8 @@
       "content_standard": "Mark-on, mark-down, mark-up",
       "performance_standard": "Analyze and solve problems on mark-up, mark-down, and mark-on",
       "learning_competency": "Differentiate Mark-on, Mark-down and Mark-up.",
+      "cognitive_level": "Average",
+      "weight": 0.2,
       "scaffolding_steps": ["Define pricing strategies", "Guided markup computation", "Comparative pricing analysis"],
       "dll_fields": {
         "objectives": "Compute and differentiate pricing strategies.",
@@ -70,6 +80,8 @@
       "content_standard": "Break-even point",
       "performance_standard": "Illustrate how to determine break-even point",
       "learning_competency": "Define break-even; illustrate how to determine break-even point.",
+      "cognitive_level": "Difficult",
+      "weight": 0.1,
       "scaffolding_steps": ["Define costs/revenue", "Graph cost/revenue intersection", "Solve break-even algebra"],
       "dll_fields": {
         "objectives": "Calculate break-even point mathematically.",
@@ -83,6 +95,8 @@
       "content_standard": "Salary, wage, income, benefits",
       "performance_standard": "Compute gross and net earnings",
       "learning_competency": "Define salary, wage, income, benefits.",
+      "cognitive_level": "Easy",
+      "weight": 0.1,
       "scaffolding_steps": ["Identify payroll terms", "Explain statutory benefits", "Analyze pay slips"],
       "dll_fields": {
         "objectives": "Distinguish between earnings and deductions.",
@@ -96,6 +110,8 @@
       "content_standard": "Gross and Net Earnings",
       "performance_standard": "Compute gross and net earnings including deductions",
       "learning_competency": "Compute gross and net earnings.",
+      "cognitive_level": "Average",
+      "weight": 0.1,
       "scaffolding_steps": ["Calculate gross earnings", "Determine deductions", "Compute net take-home pay"],
       "dll_fields": {
         "objectives": "Compute accurate net earnings.",
@@ -109,6 +125,8 @@
       "content_standard": "Measures of central tendency and variability",
       "performance_standard": "Analyze and interpret business data using statistical tools",
       "learning_competency": "Analyze and interpret data using measures of central tendency.",
+      "cognitive_level": "Average",
+      "weight": 0.05,
       "scaffolding_steps": ["Calculate mean/median/mode", "Apply to business datasets", "Interpret business results"],
       "dll_fields": {
         "objectives": "Interpret business trends via central tendency.",
@@ -122,6 +140,8 @@
       "content_standard": "Software applications for data",
       "performance_standard": "Use software to compute and present graphical representations",
       "learning_competency": "Use software (MS Excel, etc.) to compute and present graphical business data.",
+      "cognitive_level": "Difficult",
+      "weight": 0.05,
       "scaffolding_steps": ["Excel basic input", "Graphical representation creation", "Data-to-report finalization"],
       "dll_fields": {
         "objectives": "Create professional business graphs via software.",
