@@ -20,7 +20,6 @@ SPREADSHEET_NAME = "Business_Math_Master_Gradebook"
 WORKSHEET_NAME = "Skill_Analytics"
 BASEROW_URL = "https://api.baserow.io/api/database/rows/table/1012002/"
 
-# Use Flash 2.0 (more stable for batch)
 gen_client = genai.Client(api_key=GEMINI_KEY)
 
 class GradingSchema(BaseModel):
@@ -45,6 +44,21 @@ def download_image(drive_service, file_id):
         status, done = downloader.next_chunk()
     fh.seek(0)
     return Image.open(fh)
+
+def get_prompt(competency, strand, score=None):
+    if score is not None and score >= 75:
+        return f"The student mastered {competency}. Generate 1 advanced 'Challenge Problem' to push their skills further in {strand}."
+    
+    return f"""
+    Analyze the math in this image for competency {competency}. 
+    1. GRADE: Provide a score (0-100) and a brief critique.
+    2. TUTOR: Generate a 'Self-Paced Guide' for {strand}:
+       ### 1. YOUR CHALLENGE: (A relatable scenario for the student)
+       ### 2. EXPLORE: (Ask 2 probing questions to help them find their own error)
+       ### 3. THE FORMULA: (Define P, R, T, and I clearly)
+       ### 4. PRACTICE: (Provide 1 new problem to solve)
+    Return as JSON: {{"score": integer, "lesson": "string"}}
+    """
 
 def main():
     try:
@@ -74,18 +88,18 @@ def main():
 
         try:
             student_image = download_image(drive_service, file_id)
-        except Exception as img_err:
-            print(f"Could not download image {file_id}: {img_err}")
+        except Exception:
             sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "Image Error")
             continue
 
-        # --- HARDENED EXPONENTIAL BACKOFF LOGIC ---
+        # --- HARDENED RETRY LOGIC ---
         gemini_success = False
-        score, lesson = 0, ""
+        score, lesson = 0, "No feedback generated."
         
         for attempt in range(5):
             try:
-                prompt = f"Analyze the math in this image for competency {competency}. Score (0-100). If <75, provide 4As remediation for {strand}."
+                # We use the dynamic prompt function
+                prompt = get_prompt(competency, strand)
                 response = gen_client.models.generate_content(
                     model='gemini-2.0-flash',
                     contents=[prompt, student_image],
@@ -101,8 +115,7 @@ def main():
                 gemini_success = True
                 break
             except Exception as e:
-                # Mirroring Paper Paranoia: Aggressive wait time on failure
-                wait_time = (attempt + 1) * 60 
+                wait_time = (attempt + 1) * 60
                 print(f"🛑 API busy. Waiting {wait_time}s (Attempt {attempt+1}/5). Error: {e}")
                 time.sleep(wait_time)
 
@@ -114,7 +127,6 @@ def main():
         else:
             sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "AI Error")
 
-        # Increased cooldown to protect your daily quota
         print("Cooling down 45s...")
         time.sleep(45) 
 
