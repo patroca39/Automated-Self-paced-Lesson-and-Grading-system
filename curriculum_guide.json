@@ -5,6 +5,12 @@
       "content_standard": "Fractions, decimals, and percentage",
       "performance_standard": "Perform operations accurately and solve business-related problems",
       "learning_competency": "Perform fundamental operations on fractions and decimals.",
+      "scaffolding_steps": ["Review place value", "Guided decimal alignment", "Independent calculation"],
+      "dll_fields": {
+        "objectives": "Perform operations on fractions and decimals.",
+        "procedure_mastery": "Drill on decimal placement and arithmetic.",
+        "evaluation": "Formative quiz on fractional arithmetic."
+      },
       "mastery_threshold": 75
     },
     "FO-Ia-2": {
@@ -12,6 +18,12 @@
       "content_standard": "Fractions, decimals, and percentage",
       "performance_standard": "Convert between fraction, decimal, and percent forms",
       "learning_competency": "Express fractions to decimals and percent forms and vice versa.",
+      "scaffolding_steps": ["Review fraction-to-decimal logic", "Interactive conversion exercises", "Real-world business rate conversion"],
+      "dll_fields": {
+        "objectives": "Convert fractions, decimals, and percentages.",
+        "procedure_mastery": "Conversion drills.",
+        "evaluation": "Error-analysis task on conversion."
+      },
       "mastery_threshold": 75
     },
     "RP-Ie-1": {
@@ -19,6 +31,12 @@
       "content_standard": "Ratio and Rate",
       "performance_standard": "Compare and differentiate ratio and rate",
       "learning_competency": "Compare and differentiate ratio and rate.",
+      "scaffolding_steps": ["Define ratio", "Identify rate vs ratio", "Apply to business rates"],
+      "dll_fields": {
+        "objectives": "Differentiate ratio and rate in business contexts.",
+        "procedure_mastery": "Analyze business price-to-quantity rates.",
+        "evaluation": "Identification test on ratio vs rate."
+      },
       "mastery_threshold": 75
     },
     "RP-If-4": {
@@ -26,6 +44,12 @@
       "content_standard": "Proportion",
       "performance_standard": "Solve problems involving direct, inverse, and partitive proportion",
       "learning_competency": "Solve problems involving direct, inverse and partitive proportion.",
+      "scaffolding_steps": ["Setup proportion equations", "Guided solving", "Real-world proportion word problems"],
+      "dll_fields": {
+        "objectives": "Solve direct, inverse, and partitive proportion.",
+        "procedure_mastery": "Step-by-step proportion solving.",
+        "evaluation": "Problem-solving assessment."
+      },
       "mastery_threshold": 75
     },
     "BS-Ig-1": {
@@ -33,6 +57,12 @@
       "content_standard": "Mark-on, mark-down, mark-up",
       "performance_standard": "Analyze and solve problems on mark-up, mark-down, and mark-on",
       "learning_competency": "Differentiate Mark-on, Mark-down and Mark-up.",
+      "scaffolding_steps": ["Define pricing strategies", "Guided markup computation", "Comparative pricing analysis"],
+      "dll_fields": {
+        "objectives": "Compute and differentiate pricing strategies.",
+        "procedure_mastery": "Business scenario simulations.",
+        "evaluation": "Case study analysis."
+      },
       "mastery_threshold": 75
     },
     "BS-Ij-8": {
@@ -40,6 +70,12 @@
       "content_standard": "Break-even point",
       "performance_standard": "Illustrate how to determine break-even point",
       "learning_competency": "Define break-even; illustrate how to determine break-even point.",
+      "scaffolding_steps": ["Define costs/revenue", "Graph cost/revenue intersection", "Solve break-even algebra"],
+      "dll_fields": {
+        "objectives": "Calculate break-even point mathematically.",
+        "procedure_mastery": "Cost-Volume-Profit analysis.",
+        "evaluation": "Business plan break-even test."
+      },
       "mastery_threshold": 80
     },
     "SW-IIc-1": {
@@ -47,6 +83,12 @@
       "content_standard": "Salary, wage, income, benefits",
       "performance_standard": "Compute gross and net earnings",
       "learning_competency": "Define salary, wage, income, benefits.",
+      "scaffolding_steps": ["Identify payroll terms", "Explain statutory benefits", "Analyze pay slips"],
+      "dll_fields": {
+        "objectives": "Distinguish between earnings and deductions.",
+        "procedure_mastery": "Payroll terminology mapping.",
+        "evaluation": "Definition and identification quiz."
+      },
       "mastery_threshold": 75
     },
     "SW-IId-2": {
@@ -54,6 +96,12 @@
       "content_standard": "Gross and Net Earnings",
       "performance_standard": "Compute gross and net earnings including deductions",
       "learning_competency": "Compute gross and net earnings.",
+      "scaffolding_steps": ["Calculate gross earnings", "Determine deductions", "Compute net take-home pay"],
+      "dll_fields": {
+        "objectives": "Compute accurate net earnings.",
+        "procedure_mastery": "Payroll calculation drills.",
+        "evaluation": "Payroll computation assessment."
+      },
       "mastery_threshold": 80
     },
     "PAD-IIh-5": {
@@ -61,6 +109,12 @@
       "content_standard": "Measures of central tendency and variability",
       "performance_standard": "Analyze and interpret business data using statistical tools",
       "learning_competency": "Analyze and interpret data using measures of central tendency.",
+      "scaffolding_steps": ["Calculate mean/median/mode", "Apply to business datasets", "Interpret business results"],
+      "dll_fields": {
+        "objectives": "Interpret business trends via central tendency.",
+        "procedure_mastery": "Dataset analysis workshops.",
+        "evaluation": "Report writing on business data trends."
+      },
       "mastery_threshold": 80
     },
     "PAD-IIj-11": {
@@ -68,6 +122,12 @@
       "content_standard": "Software applications for data",
       "performance_standard": "Use software to compute and present graphical representations",
       "learning_competency": "Use software (MS Excel, etc.) to compute and present graphical business data.",
+      "scaffolding_steps": ["Excel basic input", "Graphical representation creation", "Data-to-report finalization"],
+      "dll_fields": {
+        "objectives": "Create professional business graphs via software.",
+        "procedure_mastery": "Hands-on software lab activity.",
+        "evaluation": "Graphical data presentation project."
+      },
       "mastery_threshold": 85
     }
   }
