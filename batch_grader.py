@@ -46,7 +46,7 @@ def get_google_services():
         build('forms', 'v1', credentials=creds)
     )
 
-# 🚀 NEW: The AI Armor Engine (Upgraded from your reference script)
+# 🚀 The AI Armor Engine: Catches 429 Errors and paces the requests
 def call_gemini_with_retry(contents, schema_class, retries=4):
     for attempt in range(retries):
         try:
@@ -60,7 +60,6 @@ def call_gemini_with_retry(contents, schema_class, retries=4):
                 )
             )
             
-            # Returns data depending on if it's the Grading or Lesson schema
             if hasattr(schema_class, 'model_validate_json'):
                 return schema_class.model_validate_json(res.text)
             else:
@@ -70,7 +69,7 @@ def call_gemini_with_retry(contents, schema_class, retries=4):
             print(f"🛑 GenAI System Exception (Attempt {attempt + 1}): {e}")
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
                 print("Quota exceeded. Triggering 50-second cooldown block...")
-                time.sleep(50) # Gives the Free Tier ample time to reset
+                time.sleep(50) 
             else:
                 time.sleep(35)
                 
@@ -183,73 +182,85 @@ def main():
     all_records = [dict(zip(headers, row)) for row in raw_data[1:] if any(row)]
 
     for index, row in enumerate(all_records, start=2):
-        # Format fix: Removes the ABM_BM11 prefix if you accidentally pasted it in the sheet
+        # Format fix: Removes the ABM_BM11 prefix if pasted from sheet
         raw_comp_code = str(row.get("Topic_Focus", ""))
         comp_code = raw_comp_code.replace("ABM_BM11", "") 
-        
         strand_focus = str(row.get("Strand_Focus", "ABM")).strip()
         curr = curr_data.get(comp_code)
         
         if not curr: continue
 
+        # ---------------------------------------------------------
         # 1. Handle MODULE GENERATION Phase
+        # ---------------------------------------------------------
         if row.get("Form_Generation_Status") == "READY":
             try:
                 banked_questions = fetch_from_item_bank(sheet_client, comp_code, strand_focus)
                 lesson_data = None
                 
                 if banked_questions:
-                    print(f"Pulled {comp_code} ({strand_focus}) questions from Item Bank.")
+                    print(f"[{comp_code}] Pulled {strand_focus} questions from Item Bank.")
                     gen_prompt = get_lesson_generation_prompt(curr, dll_tmpl, strand_focus)
-                    
-                    # 🚀 UPGRADED: Uses the retry wrapper
                     lesson_data = call_gemini_with_retry(gen_prompt, LessonSchema)
                     if not lesson_data: continue
-                    
                     form_url = create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, MASTER_TEMPLATE_ID, banked_questions)
                 else:
+                    print(f"[{comp_code}] Generating NEW questions and lesson via Gemini...")
                     gen_prompt = get_lesson_generation_prompt(curr, dll_tmpl, strand_focus)
-                    
-                    # 🚀 UPGRADED: Uses the retry wrapper
                     lesson_data = call_gemini_with_retry(gen_prompt, LessonSchema)
                     if not lesson_data: continue
                     
                     save_to_item_bank(sheet_client, comp_code, strand_focus, lesson_data.quiz)
-                    print(f"Generated new {strand_focus} questions and saved to Item Bank for {comp_code}.")
                     form_url = create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, MASTER_TEMPLATE_ID)
                 
                 sheet.update_cell(index, headers.index("Form_URL") + 1, form_url)
                 sheet.update_cell(index, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
+                print(f"✅ Module Deployed for {comp_code}")
                 
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
-        # 2. Handle GRADING Phase
+        # ---------------------------------------------------------
+        # 2. Handle GRADING Phase (Optimized Image/Text Logic)
+        # ---------------------------------------------------------
         if str(row.get("Remediation_Status", "")).strip() != "Pending": continue
         
-        contents = [get_grading_prompt(curr, dll_tmpl, row.get("Assessment_Type"), row.get("Score") or 0, row.get("Digital_Answers", ""), strand_focus)]
-        
+        digital_answers = str(row.get("Digital_Answers", "")).strip()
         raw_link = str(row.get("Log_ID", "")).strip()
+        
+        # LOGIC CHECK: If both are empty, there is nothing to grade! Skip it.
+        if not digital_answers and not raw_link:
+            print(f"Skipping Row {index}: No digital answers or image link provided.")
+            continue
+            
+        print(f"Grading Row {index} for {comp_code}...")
+        contents = [get_grading_prompt(curr, dll_tmpl, row.get("Assessment_Type"), row.get("Score") or 0, digital_answers, strand_focus)]
+        
+        # IMAGE LOGIC CHECK: Only process Google Drive if a link actually exists
         if raw_link:
             try:
+                print(" -> Image link detected. Downloading from Drive...")
                 match = re.search(r'(?:/d/|id=)([a-zA-Z0-9_-]+)', raw_link)
                 file_id = match.group(1) if match else raw_link
                 fh = io.BytesIO()
                 MediaIoBaseDownload(fh, drive_service.files().get_media(fileId=file_id)).next_chunk()
                 fh.seek(0)
                 contents.append(Image.open(fh))
+                print(" -> Image successfully attached to AI prompt.")
             except Exception as e: 
-                print(f"Image error: {e}")
+                print(f" -> Image error (Skipping image, grading text only): {e}")
+        else:
+            print(" -> No image link detected. Executing text-only grading.")
 
-        # 🚀 UPGRADED: Uses the retry wrapper
+        # Trigger Gemini
         data = call_gemini_with_retry(contents, GradingSchema)
         if not data: continue
         
         try:
-            sheet.update_cell(index, headers.index("Score") + 1, data.get('score', 0))
-            sheet.update_cell(index, headers.index("Remediation") + 1, data.get('lesson', ''))
-            sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data.get('score', 0) >= curr.get("mastery_threshold", 75) else "Needs Review")
-            print(f"Graded row {index} successfully. Module cycle complete.")
+            sheet.update_cell(index, headers.index("Score") + 1, data.score)
+            sheet.update_cell(index, headers.index("Remediation") + 1, data.lesson)
+            sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data.score >= curr.get("mastery_threshold", 75) else "Needs Review")
+            print(f"✅ Graded row {index} successfully.")
         except Exception as e:
             print(f"Grading/Update Error: {e}")
             
