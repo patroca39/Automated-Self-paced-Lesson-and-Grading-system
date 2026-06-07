@@ -16,7 +16,7 @@ from google.genai import types
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 # TODO: Paste the ID of your Master Template Google Form below
-MASTER_TEMPLATE_ID = "PASTE_YOUR_TEMPLATE_ID_HERE" 
+MASTER_TEMPLATE_ID = "1MoDMyVyMJFMIZy6HVMsVoF0G7Zz_-oHU6L_Gciw88C4" 
 
 class GradingSchema(BaseModel):
     score: int
