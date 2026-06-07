@@ -62,7 +62,8 @@ def main():
     print(f"Total rows found in sheet: {len(all_rows)}")
 
     for index, row in enumerate(all_rows, start=2):
-        status = str(row.get("Status", "")).strip()
+        # FIX 1: Look exactly at your "Remediation_Status" column
+        status = str(row.get("Remediation_Status", "")).strip()
 
         if status != "Pending":
             continue
@@ -78,7 +79,8 @@ def main():
             student_image = download_image(drive_service, file_id)
         except Exception as img_err:
             print(f"Could not download image {file_id}: {img_err}")
-            sheet.update_cell(index, sheet.row_values(1).index("Status") + 1, "Image Error")
+            # FIX 2: Update the error write-back to use the correct header
+            sheet.update_cell(index, sheet.row_values(1).index("Remediation_Status") + 1, "Image Error")
             continue
 
         headers = {"Authorization": f"Token {BASEROW_KEY}"}
@@ -101,7 +103,6 @@ def main():
         
         for attempt in range(3):
             try:
-                # Using the modern SDK and Pydantic Schema
                 response = gen_client.models.generate_content(
                     model='gemini-2.5-flash',
                     contents=[prompt, student_image],
@@ -129,10 +130,11 @@ def main():
             if gemini_success:
                 sheet.update_cell(index, headers_row.index("Score") + 1, score)
                 sheet.update_cell(index, headers_row.index("Remediation") + 1, remediation_content)
-                sheet.update_cell(index, headers_row.index("Status") + 1, final_status)
+                # FIX 3: Update the final status write-back
+                sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, final_status)
                 print(f"Successfully graded {student_id}. Score: {score}")
             else:
-                sheet.update_cell(index, headers_row.index("Status") + 1, "AI Error")
+                sheet.update_cell(index, headers_row.index("Remediation_Status") + 1, "AI Error")
         except ValueError as cell_err:
             print(f"Column mapping error: {cell_err}")
 
