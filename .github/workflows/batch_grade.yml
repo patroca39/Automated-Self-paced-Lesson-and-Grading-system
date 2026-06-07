@@ -1,29 +1,32 @@
-name: Scheduled Batch AI Grader
+name: Automated Batch Grader
 
+# This trigger allows you to run the workflow manually from the GitHub Actions tab,
+# which is perfect for your current testing phase.
 on:
-  schedule:
-    - cron: '0 17 * * *'
-  workflow_dispatch:
+  workflow_dispatch: 
 
 jobs:
-  batch-grading-job:
+  run-grader:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.11' 
 
-      - name: Install Stable Dependencies
+      - name: Install required Python packages
         run: |
-          pip install google-genai pydantic requests gspread oauth2client google-api-python-client pillow
+          python -m pip install --upgrade pip
+          pip install gspread google-api-python-client google-auth-httplib2 google-auth-oauthlib Pillow pydantic google-genai
 
-      - name: Execute Batch Grader Script
+      - name: Run the Batch Grader Factory
         env:
+          # This pulls the secrets from your GitHub repository settings 
+          # and injects them securely into the script's environment.
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          BASEROW_API_KEY: ${{ secrets.BASEROW_API_KEY }}
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON }}
         run: python batch_grader.py
