@@ -1,0 +1,34 @@
+name: Scheduled Batch AI Grader
+
+on:
+  schedule:
+    # Runs every day at 17:00 UTC (Change this to your preferred time)
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+    # This adds a manual "Run Workflow" button in your GitHub Actions tab for testing
+
+jobs:
+  batch-grading-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Stable Dependencies
+        run: |
+          pip install google-generativeai requests gspread oauth2client
+
+      - name: Create Google Credentials File
+        run: |
+          echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" > service_account.json
+
+      - name: Execute Batch Grader Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BASEROW_API_KEY: ${{ secrets.BASEROW_API_KEY }}
+        run: python batch_grader.py
