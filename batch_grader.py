@@ -3,7 +3,7 @@ import time
 import json
 import io
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from PIL import Image
@@ -20,13 +20,10 @@ class GradingSchema(BaseModel):
     mcq_quiz: list[dict] = [] 
 
 def get_google_services():
-    creds_dict = json.loads(os.environ.get('GOOGLE_CREDENTIALS_JSON'))
-    scopes = [
-        "https://spreadsheets.google.com/feeds", 
-        "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/forms.body"
-    ]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scopes)
+    # Load the user token instead of the service account
+    token_dict = json.loads(os.environ.get('GOOGLE_TOKEN_JSON'))
+    creds = Credentials.from_authorized_user_info(token_dict)
+    
     return (
         gspread.authorize(creds), 
         build('drive', 'v3', credentials=creds),
@@ -55,6 +52,7 @@ def get_prompt(curr, tmpl, assessment_type, score, typed_text):
 def create_new_assessment_form(comp_code, assessment_type, form_service, folder_id):
     form_body = {"info": {"title": f"Assessment: {comp_code} - {assessment_type.upper()}"}}
     created_form = form_service.forms().create(body=form_body).execute()
+    
     requests = [
         {"createItem": {"item": {"title": "Full Name", "questionItem": {"question": {"required": True, "textQuestion": {}}}}, "location": {"index": 0}}},
         {"createItem": {"item": {"title": "Student Email", "questionItem": {"question": {"required": True, "textQuestion": {}}}}, "location": {"index": 1}}},
@@ -69,15 +67,21 @@ def main():
     with open("dll_template.json", "r") as f: dll_tmpl = json.load(f)["dll_template"]
     
     sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Skill_Analytics")
-    headers = sheet.row_values(1)
-    all_records = sheet.get_all_records()
+    
+    # Bulletproof fix for duplicate/blank headers
+    raw_data = sheet.get_all_values()
+    headers = raw_data[0]
+    all_records = [dict(zip(headers, row)) for row in raw_data[1:] if any(row)]
 
     for index, row in enumerate(all_records, start=2):
         # 1. Handle Form Generation
         if row.get("Form_Generation_Status") == "READY":
-            form_url = create_new_assessment_form(row["Topic_Focus"], row["Assessment_Type"], form_service, "17xQylOjEy2zVRRLOUChKxAGKmXM1m0hY")
-            sheet.update_cell(index, headers.index("Form_URL") + 1, form_url)
-            sheet.update_cell(index, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
+            try:
+                form_url = create_new_assessment_form(row["Topic_Focus"], row["Assessment_Type"], form_service, "17xQylOjEy2zVRRLOUChKxAGKmXM1m0hY")
+                sheet.update_cell(index, headers.index("Form_URL") + 1, form_url)
+                sheet.update_cell(index, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
+                print(f"Generated form for {row['Topic_Focus']}")
+            except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
         # 2. Handle Grading
@@ -100,17 +104,21 @@ def main():
             except Exception as e: print(f"Image error: {e}")
 
         # AI Processing
-        res = gen_client.models.generate_content(
-            model='gemini-2.0-flash', 
-            contents=contents,
-            config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=GradingSchema)
-        )
-        data = json.loads(res.text)
-        
-        # Update Sheet
-        sheet.update_cell(index, headers.index("Score") + 1, data['score'])
-        sheet.update_cell(index, headers.index("Remediation") + 1, data['lesson'])
-        sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data['score'] >= curr.get("mastery_threshold", 75) else "Needs Review")
+        try:
+            res = gen_client.models.generate_content(
+                model='gemini-2.0-flash', 
+                contents=contents,
+                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=GradingSchema)
+            )
+            data = json.loads(res.text)
+            
+            # Update Sheet
+            sheet.update_cell(index, headers.index("Score") + 1, data['score'])
+            sheet.update_cell(index, headers.index("Remediation") + 1, data['lesson'])
+            sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data['score'] >= curr.get("mastery_threshold", 75) else "Needs Review")
+            print(f"Graded row {index} successfully.")
+        except Exception as e:
+            print(f"Grading/Update Error: {e}")
         
         time.sleep(45)
 
