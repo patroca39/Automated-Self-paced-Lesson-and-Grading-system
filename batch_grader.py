@@ -18,7 +18,7 @@ from google.genai import types
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # 🚨 UPDATE THIS: Paste the ID of your ONE permanent Google Form here
-DYNAMIC_FORM_ID = "YOUR_PERMANENT_FORM_ID_HERE" 
+DYNAMIC_FORM_ID = "6uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" 
 
 class GradingSchema(BaseModel):
     score: int
