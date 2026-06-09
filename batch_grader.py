@@ -5,6 +5,7 @@ import io
 import re
 import uuid
 import gspread
+import pandas as pd  # <-- NEW: Required for the Idempotency Check
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -194,6 +195,28 @@ def main():
     headers = raw_data[0]
     all_records = [dict(zip(headers, row)) for row in raw_data[1:] if any(row)]
 
+    # ---------------------------------------------------------
+    # 🛡️ THE IDEMPOTENCY CHECK (Spam Prevention)
+    # ---------------------------------------------------------
+    df = pd.DataFrame(all_records)
+    if not df.empty and "Remediation_Status" in df.columns:
+        # Isolate only the rows marked "Pending"
+        pending_mask = df['Remediation_Status'].str.strip() == 'Pending'
+        pending_df = df[pending_mask]
+        
+        if not pending_df.empty and 'Student_ID' in pending_df.columns and 'Topic_Focus' in pending_df.columns:
+            # Find duplicates based on Student_ID and Topic_Focus, keep only the most recent click
+            duplicates = pending_df.duplicated(subset=['Student_ID', 'Topic_Focus'], keep='last')
+            duplicate_indices = pending_df[duplicates].index
+            
+            for idx in duplicate_indices:
+                sheet_row = idx + 2  # Adjusting for 0-index and header row
+                sheet.update_cell(sheet_row, headers.index("Remediation_Status") + 1, "Duplicate_Ignored")
+                print(f"[SYSTEM] Cleaned duplicate submission for row {sheet_row}")
+                # Update local dictionary so the main loop skips it automatically
+                all_records[idx]['Remediation_Status'] = "Duplicate_Ignored"
+    # ---------------------------------------------------------
+
     for index, row in enumerate(all_records, start=2):
         raw_comp_code = str(row.get("Topic_Focus", ""))
         comp_code = raw_comp_code.replace("ABM_BM11", "") 
@@ -266,10 +289,13 @@ def main():
         if not data: continue
         
         try:
+            # 3-Tier grading system calculation
+            final_status = "Excelling" if data.score >= 90 else "Passing" if data.score >= curr.get("mastery_threshold", 75) else "Needs Review"
+            
             sheet.update_cell(index, headers.index("Score") + 1, data.score)
             sheet.update_cell(index, headers.index("Remediation") + 1, data.lesson)
-            sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Mastered" if data.score >= curr.get("mastery_threshold", 75) else "Needs Review")
-            print(f"✅ Graded row {index} successfully.")
+            sheet.update_cell(index, headers.index("Remediation_Status") + 1, final_status)
+            print(f"✅ Graded row {index} successfully. Status: {final_status}")
         except Exception as e:
             print(f"Grading/Update Error: {e}")
             
