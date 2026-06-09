@@ -16,7 +16,9 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-MASTER_TEMPLATE_ID = "1MoDMyVyMJFMIZy6HVMsVoF0G7Zz_-oHU6L_Gciw88C4" 
+
+# 🚨 UPDATE THIS: Paste the ID of your ONE permanent Google Form here
+DYNAMIC_FORM_ID = "YOUR_PERMANENT_FORM_ID_HERE" 
 
 class GradingSchema(BaseModel):
     score: int
@@ -129,14 +131,34 @@ def get_grading_prompt(curr, tmpl, assessment_type, score, typed_text, strand_fo
     Return as JSON: {{"score": integer, "lesson": "string (The scaffolding or enrichment assignment contextualized for {strand_focus})", "mcq_quiz": []}}
     """
 
-def create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, template_id, banked_questions=None):
-    new_form = drive_service.files().copy(
-        fileId=template_id,
-        body={"name": f"Module: {comp_code} - {lesson_data.lesson_title}"} if lesson_data else {"name": f"Module: {comp_code}"}
-    ).execute()
-    new_form_id = new_form['id']
-    
+def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_questions=None):
+    """
+    Clears the previous module's questions (leaving the top 4 static fields intact)
+    and injects the newly generated lesson and quiz into the permanent form.
+    """
+    form = form_service.forms().get(formId=form_id).execute()
+    items = form.get('items', [])
     requests = []
+    
+    # 1. Update the Title of the Form
+    requests.append({
+        "updateFormInfo": {
+            "info": {
+                "title": f"Module: {comp_code} - {lesson_data.lesson_title}" if lesson_data else f"Module: {comp_code}"
+            },
+            "updateMask": "title"
+        }
+    })
+    
+    # 2. Wipe old lesson/quiz items safely (Preserving Name, LRN, Topic, Upload at indices 0, 1, 2, 3)
+    for i in range(len(items) - 1, 3, -1):
+        requests.append({
+            "deleteItem": {
+                "location": {"index": i}
+            }
+        })
+        
+    current_index = 4 # Start injecting below the File Upload question
     
     if lesson_data:
         requests.append({
@@ -146,42 +168,45 @@ def create_new_assessment_form(comp_code, lesson_data, drive_service, form_servi
                     "description": lesson_data.lecture_content,
                     "textItem": {} 
                 }, 
-                "location": {"index": 0}
+                "location": {"index": current_index}
             }
         })
+        current_index += 1
     
     questions_to_build = banked_questions if banked_questions else lesson_data.quiz
     
     for i, q in enumerate(questions_to_build):
         q_text = q.get('Question_Text') if banked_questions else q.question
-        opt_a = q.get('Option_A') if banked_questions else q.option_a
-        opt_b = q.get('Option_B') if banked_questions else q.option_b
-        opt_c = q.get('Option_C') if banked_questions else q.option_c
-        opt_d = q.get('Option_D') if banked_questions else q.option_d
-
+        
+        # 🚨 STATIC COLUMNS RULE: Title is generic, Description holds the real question.
         requests.append({
             "createItem": {
                 "item": {
-                    "title": f"Q{i+1}. {q_text}",
+                    "title": f"Question {i+1}", 
+                    "description": q_text,
                     "questionItem": {
                         "question": {
                             "required": True,
                             "choiceQuestion": {
                                 "type": "RADIO",
-                                "options": [{"value": f"A) {opt_a}"}, {"value": f"B) {opt_b}"}, {"value": f"C) {opt_c}"}, {"value": f"D) {opt_d}"}]
+                                "options": [{"value": f"A) {q.get('Option_A', q.get('option_a'))}"}, 
+                                            {"value": f"B) {q.get('Option_B', q.get('option_b'))}"}, 
+                                            {"value": f"C) {q.get('Option_C', q.get('option_c'))}"}, 
+                                            {"value": f"D) {q.get('Option_D', q.get('option_d'))}"}]
                             }
                         }
                     }
                 },
-                "location": {"index": i + 1 if lesson_data else i} 
+                "location": {"index": current_index} 
             }
         })
+        current_index += 1
 
     if requests:
-        form_service.forms().batchUpdate(formId=new_form_id, body={"requests": requests}).execute()
+        form_service.forms().batchUpdate(formId=form_id, body={"requests": requests}).execute()
         
-    final_form = form_service.forms().get(formId=new_form_id).execute()
-    return final_form['responderUri']
+    return f"https://docs.google.com/forms/d/{form_id}/viewform"
+
 
 def main():
     sheet_client, drive_service, form_service = get_google_services()
@@ -234,7 +259,7 @@ def main():
                     gen_prompt = get_lesson_generation_prompt(curr, dll_tmpl, strand_focus)
                     lesson_data = call_gemini_with_retry(gen_prompt, LessonSchema)
                     if not lesson_data: continue
-                    form_url = create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, MASTER_TEMPLATE_ID, banked_questions)
+                    form_url = update_dynamic_form(comp_code, lesson_data, form_service, DYNAMIC_FORM_ID, banked_questions)
                 else:
                     print(f"[{comp_code}] Generating NEW questions and lesson via Gemini...")
                     gen_prompt = get_lesson_generation_prompt(curr, dll_tmpl, strand_focus)
@@ -242,7 +267,7 @@ def main():
                     if not lesson_data: continue
                     
                     save_to_item_bank(sheet_client, comp_code, strand_focus, lesson_data.quiz)
-                    form_url = create_new_assessment_form(comp_code, lesson_data, drive_service, form_service, MASTER_TEMPLATE_ID)
+                    form_url = update_dynamic_form(comp_code, lesson_data, form_service, DYNAMIC_FORM_ID)
                 
                 sheet.update_cell(index, headers.index("Form_URL") + 1, form_url)
                 sheet.update_cell(index, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
