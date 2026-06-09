@@ -5,7 +5,7 @@ import io
 import re
 import uuid
 import gspread
-import pandas as pd  # Required for Idempotency Check
+import pandas as pd
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -16,14 +16,12 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+DYNAMIC_FORM_ID = "YOUR_PERMANENT_FORM_ID_HERE" # 🚨 Ensure your ID is pasted here
 
-# 🚨 UPDATE THIS: Paste the ID of your ONE permanent Google Form here
-DYNAMIC_FORM_ID = "16uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" 
-
+# 🛠️ BUG FIX 2: Removed list[dict] to comply with Gemini API strict schemas
 class GradingSchema(BaseModel):
     score: int
     lesson: str
-    mcq_quiz: list[dict] = [] 
 
 class MCQ(BaseModel):
     question: str
@@ -122,13 +120,12 @@ def get_grading_prompt(curr, tmpl, assessment_type, score, typed_text, strand_fo
     is_struggling = score < curr.get("mastery_threshold", 75)
     instruction = f"REMEDIATION: Provide scaffolding based on: {' -> '.join(curr.get('scaffolding_steps', ['Review', 'Practice', 'Apply']))}." if is_struggling else f"ENRICHMENT: Provide a complex, real-world scenario assignment highly relevant to the {strand_focus} strand."
     
+    # 🛠️ BUG FIX 2: Simplified prompt since JSON schema enforces the output automatically
     return f"""
     You are an expert Teacher grading a {strand_focus} student's response.
     Competency: {curr['learning_competency']}
     {instruction}
     Student Quiz Answers/Response: {typed_text}
-    
-    Return as JSON: {{"score": integer, "lesson": "string (The scaffolding or enrichment assignment contextualized for {strand_focus})", "mcq_quiz": []}}
     """
 
 def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_questions=None):
@@ -140,7 +137,6 @@ def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_qu
     items = form.get('items', [])
     requests = []
     
-    # 1. Update the Title of the Form
     requests.append({
         "updateFormInfo": {
             "info": {
@@ -150,7 +146,7 @@ def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_qu
         }
     })
     
-    # 2. Wipe old lesson/quiz items safely (Preserving Name, LRN, Topic, Upload at indices 0, 1, 2, 3)
+    # Wipe old lesson/quiz items safely
     for i in range(len(items) - 1, 3, -1):
         requests.append({
             "deleteItem": {
@@ -158,7 +154,7 @@ def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_qu
             }
         })
         
-    current_index = 4 # Start injecting below the File Upload question
+    current_index = 4 
     
     if lesson_data:
         requests.append({
@@ -176,9 +172,20 @@ def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_qu
     questions_to_build = banked_questions if banked_questions else lesson_data.quiz
     
     for i, q in enumerate(questions_to_build):
-        q_text = q.get('Question_Text') if banked_questions else q.question
-        
-        # 🚨 STATIC COLUMNS RULE: Title is generic, Description holds the real question.
+        # 🛠️ BUG FIX 1: Safely handles both GSpread Dicts and Pydantic Objects
+        if isinstance(q, dict):
+            q_text = q.get('Question_Text', q.get('question'))
+            opt_a = q.get('Option_A', q.get('option_a'))
+            opt_b = q.get('Option_B', q.get('option_b'))
+            opt_c = q.get('Option_C', q.get('option_c'))
+            opt_d = q.get('Option_D', q.get('option_d'))
+        else:
+            q_text = q.question
+            opt_a = q.option_a
+            opt_b = q.option_b
+            opt_c = q.option_c
+            opt_d = q.option_d
+
         requests.append({
             "createItem": {
                 "item": {
@@ -189,10 +196,10 @@ def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_qu
                             "required": True,
                             "choiceQuestion": {
                                 "type": "RADIO",
-                                "options": [{"value": f"A) {q.get('Option_A', q.get('option_a'))}"}, 
-                                            {"value": f"B) {q.get('Option_B', q.get('option_b'))}"}, 
-                                            {"value": f"C) {q.get('Option_C', q.get('option_c'))}"}, 
-                                            {"value": f"D) {q.get('Option_D', q.get('option_d'))}"}]
+                                "options": [{"value": f"A) {opt_a}"}, 
+                                            {"value": f"B) {opt_b}"}, 
+                                            {"value": f"C) {opt_c}"}, 
+                                            {"value": f"D) {opt_d}"}]
                             }
                         }
                     }
@@ -207,7 +214,6 @@ def update_dynamic_form(comp_code, lesson_data, form_service, form_id, banked_qu
         
     return f"https://docs.google.com/forms/d/{form_id}/viewform"
 
-
 def main():
     sheet_client, drive_service, form_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
@@ -219,9 +225,6 @@ def main():
     headers = raw_data[0]
     all_records = [dict(zip(headers, row)) for row in raw_data[1:] if any(row)]
 
-    # ---------------------------------------------------------
-    # 🛡️ THE IDEMPOTENCY CHECK (Spam Prevention)
-    # ---------------------------------------------------------
     df = pd.DataFrame(all_records)
     if not df.empty and "Remediation_Status" in df.columns:
         pending_mask = df['Remediation_Status'].str.strip() == 'Pending'
@@ -236,7 +239,6 @@ def main():
                 sheet.update_cell(sheet_row, headers.index("Remediation_Status") + 1, "Duplicate_Ignored")
                 print(f"[SYSTEM] Cleaned duplicate submission for row {sheet_row}")
                 all_records[idx]['Remediation_Status'] = "Duplicate_Ignored"
-    # ---------------------------------------------------------
 
     for index, row in enumerate(all_records, start=2):
         raw_comp_code = str(row.get("Topic_Focus", ""))
@@ -246,9 +248,6 @@ def main():
         
         if not curr: continue
 
-        # ---------------------------------------------------------
-        # 1. Handle MODULE GENERATION Phase
-        # ---------------------------------------------------------
         if row.get("Form_Generation_Status") == "READY":
             try:
                 banked_questions = fetch_from_item_bank(sheet_client, comp_code, strand_focus)
@@ -276,9 +275,6 @@ def main():
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
-        # ---------------------------------------------------------
-        # 2. Handle GRADING Phase
-        # ---------------------------------------------------------
         if str(row.get("Remediation_Status", "")).strip() != "Pending": continue
         
         digital_answers = str(row.get("Digital_Answers", "")).strip()
@@ -308,7 +304,6 @@ def main():
 
         data = call_gemini_with_retry(contents, GradingSchema)
         
-        # 🚨 THE MANUAL REVIEW FLAG (Safety Guard)
         if not data:
             print(f"⚠️ AI failed to grade Row {index} (Possible Safety Block). Flagging for manual review.")
             try:
@@ -319,7 +314,6 @@ def main():
             continue
         
         try:
-            # 3-Tier grading system calculation
             final_status = "Excelling" if data.score >= 90 else "Passing" if data.score >= curr.get("mastery_threshold", 75) else "Needs Review"
             
             sheet.update_cell(index, headers.index("Score") + 1, data.score)
