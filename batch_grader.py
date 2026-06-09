@@ -5,7 +5,7 @@ import io
 import re
 import uuid
 import gspread
-import pandas as pd  # <-- NEW: Required for the Idempotency Check
+import pandas as pd  # Required for Idempotency Check
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -138,7 +138,6 @@ def create_new_assessment_form(comp_code, lesson_data, drive_service, form_servi
     
     requests = []
     
-    # 🚀 THE CRITICAL FIX IS HERE
     if lesson_data:
         requests.append({
             "createItem": {
@@ -200,20 +199,17 @@ def main():
     # ---------------------------------------------------------
     df = pd.DataFrame(all_records)
     if not df.empty and "Remediation_Status" in df.columns:
-        # Isolate only the rows marked "Pending"
         pending_mask = df['Remediation_Status'].str.strip() == 'Pending'
         pending_df = df[pending_mask]
         
         if not pending_df.empty and 'Student_ID' in pending_df.columns and 'Topic_Focus' in pending_df.columns:
-            # Find duplicates based on Student_ID and Topic_Focus, keep only the most recent click
             duplicates = pending_df.duplicated(subset=['Student_ID', 'Topic_Focus'], keep='last')
             duplicate_indices = pending_df[duplicates].index
             
             for idx in duplicate_indices:
-                sheet_row = idx + 2  # Adjusting for 0-index and header row
+                sheet_row = idx + 2  
                 sheet.update_cell(sheet_row, headers.index("Remediation_Status") + 1, "Duplicate_Ignored")
                 print(f"[SYSTEM] Cleaned duplicate submission for row {sheet_row}")
-                # Update local dictionary so the main loop skips it automatically
                 all_records[idx]['Remediation_Status'] = "Duplicate_Ignored"
     # ---------------------------------------------------------
 
@@ -286,7 +282,16 @@ def main():
             print(" -> No image link detected. Executing text-only grading.")
 
         data = call_gemini_with_retry(contents, GradingSchema)
-        if not data: continue
+        
+        # 🚨 THE MANUAL REVIEW FLAG (Safety Guard)
+        if not data:
+            print(f"⚠️ AI failed to grade Row {index} (Possible Safety Block). Flagging for manual review.")
+            try:
+                sheet.update_cell(index, headers.index("Remediation_Status") + 1, "Manual_Review_Required")
+                sheet.update_cell(index, headers.index("Remediation") + 1, "System Error: Please see instructor.")
+            except Exception as e:
+                print(f"Failed to update error status for row {index}: {e}")
+            continue
         
         try:
             # 3-Tier grading system calculation
