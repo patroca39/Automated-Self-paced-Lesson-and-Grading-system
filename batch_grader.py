@@ -16,7 +16,7 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-DYNAMIC_FORM_ID = "YOUR_PERMANENT_FORM_ID_HERE" # 🚨 Ensure your ID is pasted here
+DYNAMIC_FORM_ID = "16uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" # 🚨 Ensure your ID is pasted here
 
 # 🛠️ BUG FIX 2: Removed list[dict] to comply with Gemini API strict schemas
 class GradingSchema(BaseModel):
