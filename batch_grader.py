@@ -74,7 +74,8 @@ def fetch_from_vault(sheet_client, comp_code, strand_focus):
     try:
         vault = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Modules_Vault")
         for r in vault.get_all_records():
-            if str(r.get('Topic_Focus')) == comp_code and str(r.get('Strand_Focus')).strip().upper() == str(strand_focus).strip().upper():
+            # 🛠️ BUG FIX: Bulletproof string matching
+            if str(r.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(r.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper():
                 return r
     except Exception: pass
     return None
@@ -82,7 +83,8 @@ def fetch_from_vault(sheet_client, comp_code, strand_focus):
 def fetch_banked_questions(sheet_client, comp_code, strand_focus):
     bank = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
     all_items = bank.get_all_records()
-    return [item for item in all_items if item.get('Topic_Focus') == comp_code and str(item.get('Strand_Focus', '')).strip().upper() == str(strand_focus).strip().upper()]
+    # 🛠️ BUG FIX: Bulletproof string matching
+    return [item for item in all_items if str(item.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(item.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper()]
 
 def save_items_to_bank(sheet_client, comp_code, strand_focus, mcq_list):
     bank = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
@@ -112,9 +114,18 @@ def get_generation_prompt(curr, strand_focus, missing_count, is_exam, hard_mode=
         For each question, provide a 'sub_concept' tag and a 'targeted_remediation' sentence explaining the correct logic.
         """
     else:
+        # 🛠️ BUG FIX: Resurrected the strict formatting mandate for reading modules
         return f"""
         Create a self-paced module for competency: {curr['learning_competency']} ({strand_focus} track).
-        1. LECTURE: Clear tutorial (use double line breaks and bullets).
+        
+        🛑 FORMATTING MANDATE FOR THE LECTURE: 
+        Google Forms requires plain text, so you MUST structure the `lecture_content` string beautifully using spacing:
+        - Use double line breaks (\\n\\n) to create distinct, bite-sized paragraphs.
+        - Use ALL CAPS for section headers.
+        - Use unicode bullet points (•) for lists.
+        - NEVER output a single, giant wall of text. Break it up so it is easy on the eyes.
+        
+        1. LECTURE: Clear tutorial strictly following the formatting mandate above.
         2. REMEDIATION: Scaffolding breakdown for struggling students.
         3. ENRICHMENT: Complex scenario for excelling students.
         4. QUIZ: {missing_count} questions. For each, provide a 'sub_concept' tag and a 'targeted_remediation' explanation.
@@ -163,9 +174,10 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
 
 def grade_submission_natively(student_answers_str, comp_code, strand_focus, sheet_client):
     bank = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
-    answer_keys = [r for r in bank.get_all_records() if r.get('Topic_Focus') == comp_code and str(r.get('Strand_Focus')).strip().upper() == str(strand_focus).strip().upper()]
+    # 🛠️ BUG FIX: Bulletproof string matching to fix "Answer keys not found"
+    answer_keys = [r for r in bank.get_all_records() if str(r.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(r.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper()]
     
-    if not answer_keys: return None, "", "Error: Answer keys not found."
+    if not answer_keys: return None, "", "Error: Answer keys not found in Item Bank."
         
     student_choices = re.findall(r'([A-D])\)', student_answers_str.upper()) or re.findall(r'\b([A-D])\b', student_answers_str.upper())
     student_choices += ['MISSING'] * max(0, len(answer_keys) - len(student_choices))
