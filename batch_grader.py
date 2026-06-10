@@ -68,23 +68,40 @@ def fetch_student_from_roster(sheet_client, student_id):
 def format_math_text(text):
     return str(text).replace("*", "×").replace("/", "÷")
 
+# 🚀 INJECTED UPGRADE 6: The Cascade Engine
 def call_gemini_with_retry(contents, schema_class, retries=4):
-    for attempt in range(retries):
-        try:
-            print(f"Calling Gemini Core (Attempt {attempt + 1}/{retries})...")
-            res = gen_client.models.generate_content(
-                model='gemini-1.5-flash', # Swapped to 1.5 Flash
-                contents=contents,
-                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema_class)
-            )
-            return schema_class.model_validate_json(res.text)
-        except Exception as e:
-            print(f"🛑 GenAI Exception: {e}")
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
-                print("Quota exceeded. Triggering 50-second cooldown block...")
-                time.sleep(50) 
-            else:
-                time.sleep(35)
+    models_to_try = [
+        'gemini-3.5-flash',       # Latest stable 2026 model
+        'gemini-3.1-flash-lite',  # High-speed 2026 alternative
+        'gemini-2.5-flash',       # 2025 fallback
+        'gemini-2.0-flash'        # Legacy fallback
+    ]
+    
+    for model_name in models_to_try:
+        for attempt in range(retries):
+            try:
+                print(f"Calling API using [{model_name}] (Attempt {attempt + 1}/{retries})...")
+                res = gen_client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema_class)
+                )
+                return schema_class.model_validate_json(res.text)
+            except Exception as e:
+                error_str = str(e)
+                print(f"🛑 GenAI Exception: {error_str}")
+                
+                if "404" in error_str or "NOT_FOUND" in error_str:
+                    print(f"⚠️ Model {model_name} rejected by API. Cascading to next available model...")
+                    break  # Break retry loop, instantly move to the NEXT model in the list
+                    
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str.upper():
+                    print("⏳ Quota exceeded. Triggering 50-second cooldown block...")
+                    time.sleep(50) 
+                else:
+                    time.sleep(35)
+                    
+    print("❌ FATAL: All model fallbacks exhausted. Please verify API Key provisioning.")
     return None
 
 def fetch_from_vault(sheet_client, comp_code, strand_focus):
@@ -118,10 +135,10 @@ def save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data):
     vault = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Modules_Vault")
     vault.append_row([comp_code, strand_focus, lesson_data.lesson_title, lesson_data.lecture_content, lesson_data.remediation_scaffolding, lesson_data.enrichment_scenario])
 
+# 🚀 INJECTED UPGRADE 3: LaTeX Math Formatting Rules
 def get_generation_prompt(curr, strand_focus, missing_count, is_exam, hard_mode=False):
     difficulty_context = "CRITICAL THINKING & ADVANCED ANALYSIS ONLY. These questions must be extremely difficult, requiring multi-step logic and deep synthesis." if hard_mode else "Standard high school difficulty."
     
-    # 🚀 INJECTED UPGRADE 3: LaTeX Math Formatting Rules Added
     if is_exam:
         return f"""
         Generate exactly {missing_count} brand new multiple-choice questions for competency: {curr['learning_competency']} ({strand_focus} track).
@@ -189,6 +206,7 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
         form_service.forms().batchUpdate(formId=form_id, body={"requests": requests}).execute()
     return f"https://docs.google.com/forms/d/{form_id}/viewform"
 
+# 🚀 INJECTED UPGRADE 4: Indestructible Key Lookup
 def grade_submission_natively(student_answers_str, comp_code, strand_focus, sheet_client):
     bank = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
     answer_keys = [r for r in bank.get_all_records() if str(r.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(r.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper()]
@@ -202,7 +220,6 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     feedback_blocks = []
     
     for idx, item in enumerate(answer_keys):
-        # 🚀 INJECTED UPGRADE 4: Indestructible Key Lookup
         ans = next((item[k] for k in item if k.lower() == 'correct_answer'), "")
         if idx < len(student_choices) and student_choices[idx] == str(ans).strip().upper():
             correct_count += 1
@@ -245,7 +262,7 @@ def main():
         if profile:
             strand_focus = str(profile.get("Strand_Focus", "ABM")).strip().upper()
         else:
-            strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper() # Safer Default
+            strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper() 
             
         assessment_type = str(row.get("Assessment_Type", "QUIZ")).strip().upper()
         curr = curr_data.get(comp_code)
@@ -325,7 +342,6 @@ def main():
             final_feedback = vault.get('Enrichment_Text', "Perfect score! Keep up the great work.") if vault else "Perfect score!"
         elif score < curr.get("mastery_threshold", 75):
             vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
-            # Pull Remediation Scaffolding from Vault, default to Diag_Feedback if missing
             final_feedback = format_math_text(vault.get('Remediation_Scaffolding', diag_feedback)) if vault else diag_feedback
         else:
             final_feedback = diag_feedback
