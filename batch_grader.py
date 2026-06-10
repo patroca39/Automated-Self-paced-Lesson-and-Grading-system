@@ -12,6 +12,7 @@ from google import genai
 from google.genai import types
 
 # --- CONFIGURATION ---
+print("--- INITIALIZING SYSTEM ---")
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 DYNAMIC_FORM_ID = "16uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" 
 
@@ -47,6 +48,7 @@ class ExamSchema(BaseModel):
     quiz: list[MCQ]
 
 def get_google_services():
+    print("Connecting to Google Services...")
     token_dict = json.loads(os.environ.get('GOOGLE_TOKEN_JSON'))
     creds = Credentials.from_authorized_user_info(token_dict)
     return gspread.authorize(creds), build('drive', 'v3', credentials=creds), build('forms', 'v1', credentials=creds)
@@ -71,7 +73,7 @@ def call_gemini_with_retry(contents, schema_class, retries=4):
         try:
             print(f"Calling Gemini Core (Attempt {attempt + 1}/{retries})...")
             res = gen_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-1.5-flash', # Swapped to 1.5 Flash
                 contents=contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema_class)
             )
