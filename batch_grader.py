@@ -61,9 +61,27 @@ def fetch_student_from_roster(sheet_client, student_id):
         print(f"Roster Lookup Error: {e}")
     return None
 
+# 🚀 UPGRADE: The Python LaTeX Scrubber
 def format_math_text(text):
-    # Enforces standard symbols just in case
-    return str(text).replace("*", "×").replace("/", "÷")
+    if not text: return ""
+    text = str(text)
+    
+    # 1. Convert LaTeX fractions \frac{a}{b} -> a/b
+    text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
+    
+    # 2. Convert common LaTeX commands to Unicode
+    replacements = {
+        "\\times": "×",
+        "\\div": "÷",
+        "\\pm": "±",
+        "\\^2": "²",
+        "$": "",     # Strip math delimiters
+        "\\": ""     # Strip rogue backslashes
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+        
+    return text.strip()
 
 def call_gemini_with_retry(contents, schema_class, retries=4):
     for attempt in range(retries):
@@ -104,37 +122,43 @@ def save_items_to_bank(sheet_client, comp_code, strand_focus, mcq_list):
     for q in mcq_list:
         item_id = f"{comp_code}-{str(uuid.uuid4())[:6]}"
         new_rows.append([
-            item_id, comp_code, strand_focus, q.question, 
-            q.option_a, q.option_b, q.option_c, q.option_d, 
+            item_id, comp_code, strand_focus, format_math_text(q.question), 
+            format_math_text(q.option_a), format_math_text(q.option_b), format_math_text(q.option_c), format_math_text(q.option_d), 
             q.correct_answer.strip().upper(), q.difficulty, 0,
-            q.sub_concept, q.targeted_remediation
+            q.sub_concept, format_math_text(q.targeted_remediation)
         ])
     bank.append_rows(new_rows)
 
 def save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data):
     vault = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Modules_Vault")
-    vault.append_row([comp_code, strand_focus, lesson_data.lesson_title, lesson_data.lecture_content, lesson_data.remediation_scaffolding, lesson_data.enrichment_scenario])
+    vault.append_row([comp_code, strand_focus, lesson_data.lesson_title, format_math_text(lesson_data.lecture_content), format_math_text(lesson_data.remediation_scaffolding), lesson_data.enrichment_scenario])
 
 def get_generation_prompt(curr, strand_focus, missing_count, is_exam, hard_mode=False):
     difficulty_context = "CRITICAL THINKING & ADVANCED ANALYSIS ONLY." if hard_mode else "Standard high school difficulty."
     
+    # Unified, brutally strict prompt against LaTeX
+    base_prompt = f"""
+    🛑 CRITICAL MATH FORMATTING RULES - DO NOT IGNORE 🛑
+    1. ABSOLUTELY NO LATEX ALLOWED. Google Forms will break.
+    2. Do NOT use the `$` symbol for math blocks. 
+    3. Do NOT use `\\frac{{}}`, `\\times`, or `\\div`. 
+    4. Write fractions as plain text: a/b (e.g., 1/4).
+    5. Use standard keyboard symbols: ×, ÷, =, %, ₱ (for Philippine Peso).
+    """
+
     if is_exam:
         return f"""
         Generate exactly {missing_count} brand new multiple-choice questions for competency: {curr['learning_competency']} ({strand_focus} track).
         DIFFICULTY: {difficulty_context}
-        🛑 MATH FORMATTING MANDATE: Google Forms CANNOT read LaTeX. 
-        - DO NOT use $, \\frac, \\times, or any LaTeX syntax. 
-        - Use plain keyboard symbols (e.g., write fractions as a/b, use ×, ÷, =).
+        {base_prompt}
         Provide brief 'instructions' for the exam block.
         For each question, provide a 'sub_concept' tag and a 'targeted_remediation' sentence explaining the correct logic.
         """
     else:
         return f"""
         Create a self-paced module for competency: {curr['learning_competency']} ({strand_focus} track).
-        
-        🛑 FORMATTING MANDATE FOR THE LECTURE & MATH: 
-        - Google Forms CANNOT read LaTeX. DO NOT use $, \\frac, \\times, or any LaTeX syntax.
-        - Use standard unicode symbols for math (e.g., ½, ², ×, ÷). Write fractions with a slash (e.g., 3/4).
+        {base_prompt}
+        🛑 LECTURE FORMATTING:
         - Use double line breaks (\\n\\n) to create distinct paragraphs.
         - Use ALL CAPS for section headers.
         - Use unicode bullet points (•) for lists.
@@ -143,7 +167,7 @@ def get_generation_prompt(curr, strand_focus, missing_count, is_exam, hard_mode=
         1. LECTURE: Clear tutorial strictly following the formatting mandate above.
         2. REMEDIATION: Scaffolding breakdown for struggling students.
         3. ENRICHMENT: Complex scenario for excelling students.
-        4. QUIZ: {missing_count} questions. For each, provide a 'sub_concept' tag and a 'targeted_remediation' explanation.
+        4. QUIZ: {missing_count} questions. Provide 'sub_concept' and 'targeted_remediation'.
         """
 
 def update_dynamic_form(comp_code, instruction_title, instruction_body, combined_quiz, form_service, form_id):
@@ -158,7 +182,7 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
     if instruction_body:
         requests.append({
             "createItem": {
-                "item": {"title": instruction_title, "description": instruction_body, "textItem": {}}, 
+                "item": {"title": instruction_title, "description": format_math_text(instruction_body), "textItem": {}}, 
                 "location": {"index": current_index}
             }
         })
@@ -218,7 +242,6 @@ def main():
     
     sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Skill_Analytics")
     
-    # Extract data securely to ensure index alignment
     all_values = sheet.get_all_values()
     headers = all_values[0]
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
@@ -229,7 +252,6 @@ def main():
         pending_mask = df['Remediation_Status'].str.strip() == 'Pending'
         pending_df = df[pending_mask]
         if not pending_df.empty and 'Student_ID' in pending_df.columns and 'Topic_Focus' in pending_df.columns:
-            # ONLY check duplicates for rows that actually have a Student_ID (Ignores Ghost Rows)
             valid_pending = pending_df[pending_df['Student_ID'].str.strip() != '']
             duplicates = valid_pending.duplicated(subset=['Student_ID', 'Topic_Focus'], keep='last')
             for idx in valid_pending[duplicates].index:
@@ -242,7 +264,7 @@ def main():
         if row.get("Remediation_Status") == "Duplicate_Ignored": continue
         
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
-        if not raw_comp_code: continue # Skip completely empty rows
+        if not raw_comp_code: continue
         comp_code = raw_comp_code.replace("ABM_BM11", "") 
         
         assessment_type = str(row.get("Assessment_Type", "QUIZ")).strip().upper()
@@ -250,7 +272,6 @@ def main():
         if not curr: continue
 
         # --- HYBRID MODULE / EXAM GENERATION ---
-        # Generation does not strictly require a Student_ID, so we use the sheet's Strand_Focus
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             
@@ -303,7 +324,7 @@ def main():
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
             
-            # GHOST ROW PROTECTION: Skip if no Student ID
+            # GHOST ROW PROTECTION
             if not student_id:
                 print(f"Skipping Row {row_idx}: No Student_ID (Ghost Row).")
                 continue
@@ -313,7 +334,7 @@ def main():
                 print(f"Skipping Row {row_idx}: No digital answers provided.")
                 continue
 
-            # ROSTER VERIFICATION: Authoritative Strand Sync
+            # ROSTER VERIFICATION
             profile = fetch_student_from_roster(sheet_client, student_id)
             if not profile:
                 print(f"❌ Error: Student ID {student_id} not found in Master Roster!")
