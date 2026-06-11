@@ -15,7 +15,6 @@ from google.genai import types
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 DYNAMIC_FORM_ID = "16uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" 
 
-# --- ASSESSMENT RULES ENGINE ---
 ASSESSMENT_RULES = {
     "QUIZ": {"target_count": 10, "has_lecture": True},
     "ASSIGNMENT": {"target_count": 10, "has_lecture": True},
@@ -61,32 +60,18 @@ def fetch_student_from_roster(sheet_client, student_id):
         print(f"Roster Lookup Error: {e}")
     return None
 
-# 🚀 UPGRADE: The Python LaTeX Scrubber
 def format_math_text(text):
     if not text: return ""
     text = str(text)
-    
-    # 1. Convert LaTeX fractions \frac{a}{b} -> a/b
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
-    
-    # 2. Convert common LaTeX commands to Unicode
-    replacements = {
-        "\\times": "×",
-        "\\div": "÷",
-        "\\pm": "±",
-        "\\^2": "²",
-        "$": "",     # Strip math delimiters
-        "\\": ""     # Strip rogue backslashes
-    }
+    replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": ""}
     for old, new in replacements.items():
         text = text.replace(old, new)
-        
     return text.strip()
 
 def call_gemini_with_retry(contents, schema_class, retries=4):
     for attempt in range(retries):
         try:
-            print(f"Calling Gemini Core (Attempt {attempt + 1}/{retries})...")
             res = gen_client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=contents,
@@ -94,9 +79,7 @@ def call_gemini_with_retry(contents, schema_class, retries=4):
             )
             return schema_class.model_validate_json(res.text)
         except Exception as e:
-            print(f"🛑 GenAI Exception: {e}")
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
-                print("Quota exceeded. Triggering 50-second cooldown block...")
                 time.sleep(50) 
             else:
                 time.sleep(35)
@@ -135,40 +118,14 @@ def save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data):
 
 def get_generation_prompt(curr, strand_focus, missing_count, is_exam, hard_mode=False):
     difficulty_context = "CRITICAL THINKING & ADVANCED ANALYSIS ONLY." if hard_mode else "Standard high school difficulty."
-    
-    # Unified, brutally strict prompt against LaTeX
-    base_prompt = f"""
-    🛑 CRITICAL MATH FORMATTING RULES - DO NOT IGNORE 🛑
-    1. ABSOLUTELY NO LATEX ALLOWED. Google Forms will break.
-    2. Do NOT use the `$` symbol for math blocks. 
-    3. Do NOT use `\\frac{{}}`, `\\times`, or `\\div`. 
-    4. Write fractions as plain text: a/b (e.g., 1/4).
-    5. Use standard keyboard symbols: ×, ÷, =, %, ₱ (for Philippine Peso).
+    base_prompt = """
+    🛑 CRITICAL MATH FORMATTING RULES: NO LATEX ALLOWED. Do NOT use $, \\frac, \\times, or \\div. 
+    Write fractions cleanly as plain text: a/b (e.g., 1/4). Use Unicode symbols: ×, ÷, =, %, ₱.
     """
-
     if is_exam:
-        return f"""
-        Generate exactly {missing_count} brand new multiple-choice questions for competency: {curr['learning_competency']} ({strand_focus} track).
-        DIFFICULTY: {difficulty_context}
-        {base_prompt}
-        Provide brief 'instructions' for the exam block.
-        For each question, provide a 'sub_concept' tag and a 'targeted_remediation' sentence explaining the correct logic.
-        """
+        return f"Generate exactly {missing_count} brand new MCQs for competency: {curr['learning_competency']} ({strand_focus} track).\nDIFFICULTY: {difficulty_context}\n{base_prompt}"
     else:
-        return f"""
-        Create a self-paced module for competency: {curr['learning_competency']} ({strand_focus} track).
-        {base_prompt}
-        🛑 LECTURE FORMATTING:
-        - Use double line breaks (\\n\\n) to create distinct paragraphs.
-        - Use ALL CAPS for section headers.
-        - Use unicode bullet points (•) for lists.
-        - NEVER output a single, giant wall of text. Break it up.
-        
-        1. LECTURE: Clear tutorial strictly following the formatting mandate above.
-        2. REMEDIATION: Scaffolding breakdown for struggling students.
-        3. ENRICHMENT: Complex scenario for excelling students.
-        4. QUIZ: {missing_count} questions. Provide 'sub_concept' and 'targeted_remediation'.
-        """
+        return f"Create a self-paced module for competency: {curr['learning_competency']} ({strand_focus} track).\n{base_prompt}\nBreak text with clear double line breaks."
 
 def update_dynamic_form(comp_code, instruction_title, instruction_body, combined_quiz, form_service, form_id):
     form = form_service.forms().get(formId=form_id).execute()
@@ -180,12 +137,7 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
         
     current_index = 4
     if instruction_body:
-        requests.append({
-            "createItem": {
-                "item": {"title": instruction_title, "description": format_math_text(instruction_body), "textItem": {}}, 
-                "location": {"index": current_index}
-            }
-        })
+        requests.append({"createItem": {"item": {"title": instruction_title, "description": format_math_text(instruction_body), "textItem": {}}, "location": {"index": current_index}}})
         current_index += 1
     
     for i, q in enumerate(combined_quiz):
@@ -207,8 +159,7 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
         })
         current_index += 1
 
-    if requests:
-        form_service.forms().batchUpdate(formId=form_id, body={"requests": requests}).execute()
+    form_service.forms().batchUpdate(formId=form_id, body={"requests": requests}).execute()
     return f"https://docs.google.com/forms/d/{form_id}/viewform"
 
 def grade_submission_natively(student_answers_str, comp_code, strand_focus, sheet_client):
@@ -236,140 +187,119 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     return score, format_math_text("\n".join(feedback_blocks)), None
 
 def main():
-    print("Starting Script...")
+    print("Initializing Circular Grader System...")
     sheet_client, drive_service, form_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
     sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Skill_Analytics")
-    
     all_values = sheet.get_all_values()
     headers = all_values[0]
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
 
-    # --- PANDAS DUPLICATE CHECKER ---
-    df = pd.DataFrame(all_records)
-    if not df.empty and "Remediation_Status" in df.columns:
-        pending_mask = df['Remediation_Status'].str.strip() == 'Pending'
-        pending_df = df[pending_mask]
-        if not pending_df.empty and 'Student_ID' in pending_df.columns and 'Topic_Focus' in pending_df.columns:
-            valid_pending = pending_df[pending_df['Student_ID'].str.strip() != '']
-            duplicates = valid_pending.duplicated(subset=['Student_ID', 'Topic_Focus'], keep='last')
-            for idx in valid_pending[duplicates].index:
-                actual_row = idx + 2
-                sheet.update_cell(actual_row, headers.index("Remediation_Status") + 1, "Duplicate_Ignored")
-                all_records[idx]['Remediation_Status'] = "Duplicate_Ignored"
-
-    # --- MAIN PROCESSING LOOP ---
     for row_idx, row in enumerate(all_records, start=2):
-        if row.get("Remediation_Status") == "Duplicate_Ignored": continue
-        
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
         if not raw_comp_code: continue
         comp_code = raw_comp_code.replace("ABM_BM11", "") 
-        
         assessment_type = str(row.get("Assessment_Type", "QUIZ")).strip().upper()
         curr = curr_data.get(comp_code)
         if not curr: continue
 
-        # --- HYBRID MODULE / EXAM GENERATION ---
+        # --- STEP 1: INITIAL CONTENT & FORM GENERATION ---
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
-            
             rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
-            target_count = rules["target_count"]
-            has_lecture = rules["has_lecture"]
-            hard_mode = rules.get("hard_mode", False)
-
+            
             banked_questions = fetch_banked_questions(sheet_client, comp_code, strand_focus)
-            missing_count = max(0, target_count - len(banked_questions))
+            missing_count = max(0, rules["target_count"] - len(banked_questions))
             
             combined_quiz = banked_questions.copy()
-            instruction_title = "📖 Reading Module" if has_lecture else "📝 Exam Instructions"
-            instruction_body = "Please answer the following questions carefully."
+            instruction_title = "📖 Reading Module" if rules["has_lecture"] else "📝 Exam Instructions"
+            instruction_body = ""
 
             if missing_count > 0:
-                print(f"[{comp_code}] Generating {missing_count} NEW questions for {strand_focus}...")
-                gen_prompt = get_generation_prompt(curr, strand_focus, missing_count, not has_lecture, hard_mode)
-                
-                if has_lecture:
-                    with open("dll_template.json", "r") as f: dll_tmpl = json.load(f)["dll_template"]
+                gen_prompt = get_generation_prompt(curr, strand_focus, missing_count, not rules["has_lecture"])
+                if rules["has_lecture"]:
                     lesson_data = call_gemini_with_retry(gen_prompt, LessonSchema)
-                    if not lesson_data: continue
-                    save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data)
-                    save_items_to_bank(sheet_client, comp_code, strand_focus, lesson_data.quiz)
-                    combined_quiz.extend(lesson_data.quiz)
-                    instruction_body = lesson_data.lecture_content
+                    if lesson_data:
+                        save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data)
+                        save_items_to_bank(sheet_client, comp_code, strand_focus, lesson_data.quiz)
+                        combined_quiz.extend(lesson_data.quiz)
+                        instruction_body = lesson_data.lecture_content
                 else:
                     exam_data = call_gemini_with_retry(gen_prompt, ExamSchema)
-                    if not exam_data: continue
-                    save_items_to_bank(sheet_client, comp_code, strand_focus, exam_data.quiz)
-                    combined_quiz.extend(exam_data.quiz)
-                    instruction_body = exam_data.instructions
+                    if exam_data:
+                        save_items_to_bank(sheet_client, comp_code, strand_focus, exam_data.quiz)
+                        combined_quiz.extend(exam_data.quiz)
+                        instruction_body = exam_data.instructions
             else:
-                print(f"[{comp_code}] Target count met using Item Bank.")
-                if has_lecture:
+                if rules["has_lecture"]:
                     vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
                     instruction_body = vault.get('Lecture_Content', '') if vault else ""
-            
+
             try:
-                print(f"[{comp_code}] Updating Google Form...")
                 form_url = update_dynamic_form(comp_code, instruction_title, instruction_body, combined_quiz, form_service, DYNAMIC_FORM_ID)
                 sheet.update_cell(row_idx, headers.index("Form_URL") + 1, form_url)
+                # n8n looks for "DEPLOYED" status to automatically pull emails and route the form
                 sheet.update_cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
-                print(f"✅ {assessment_type} Deployed for {comp_code}")
+                print(f"Form Deployed for {comp_code}. Handing off to n8n for email distribution.")
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
-        # --- NATIVE INSTANT GRADING ---
+        # --- STEP 2 & 4: MULTI-TRY GRADING AND REMEDIATION ENGINE ---
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
-            
-            # GHOST ROW PROTECTION
-            if not student_id:
-                print(f"Skipping Row {row_idx}: No Student_ID (Ghost Row).")
-                continue
+            if not student_id: continue  # Ghost row gate
                 
             digital_answers = str(row.get("Digital_Answers", "")).strip()
-            if not digital_answers:
-                print(f"Skipping Row {row_idx}: No digital answers provided.")
-                continue
+            if not digital_answers: continue
 
-            # ROSTER VERIFICATION
             profile = fetch_student_from_roster(sheet_client, student_id)
             if not profile:
-                print(f"❌ Error: Student ID {student_id} not found in Master Roster!")
                 sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, "Roster_Error")
                 continue
             
             strand_focus = str(profile.get("Strand_Focus", "ABM")).strip().upper()
-                
-            print(f"⚡ Natively Grading Row {row_idx} ({comp_code}) | Authentic Roster Strand: {strand_focus}")
+            
+            # Extract try count safely (defaults to Try 1 if left empty)
+            try:
+                current_tries = int(row.get("Tries", 1))
+            except ValueError:
+                current_tries = 1
+
+            print(f"Grading Submission: Student {student_id} | Attempt #{current_tries}")
             score, diag_feedback, error = grade_submission_natively(digital_answers, comp_code, strand_focus, sheet_client)
             
             if error:
-                print(f"❌ Grading Error: {error}")
                 sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, "Manual_Review")
-                sheet.update_cell(row_idx, headers.index("Remediation") + 1, error)
                 continue
                 
-            status = "Excelling" if score >= 90 else "Passing" if score >= curr.get("mastery_threshold", 75) else "Needs Review"
+            mastery_threshold = curr.get("mastery_threshold", 75)
             
-            if score == 100:
+            # Logic branch depending on score performance
+            if score >= mastery_threshold:
+                status = "Excelling" if score >= 90 else "Passing"
                 vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
-                final_feedback = vault.get('Enrichment_Text', "Perfect score! Keep up the great work.") if vault else "Perfect score!"
-            elif score < curr.get("mastery_threshold", 75):
+                final_feedback = vault.get('Enrichment_Text', "Passed successfully!") if vault else "Passed successfully!"
+            else:
+                # Flagged for Remediation
+                status = "Needs Review"
                 vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
                 final_feedback = format_math_text(vault.get('Remediation_Scaffolding', diag_feedback)) if vault else diag_feedback
-            else:
-                final_feedback = diag_feedback
 
             try:
                 sheet.update_cell(row_idx, headers.index("Score") + 1, score)
                 sheet.update_cell(row_idx, headers.index("Remediation") + 1, final_feedback)
-                sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, status)
-                print(f"✅ Row {row_idx} complete. Score: {score}%")
-            except Exception as e:
-                print(f"Grading/Update Error: {e}")
+                
+                # --- AUTOMATED ATTEMPT ROUTING LATCH ---
+                if status == "Needs Review" and current_tries < 2:
+                    # n8n watches for "Needs Review_Trigger" to route specialized materials or re-send links
+                    sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, "Needs Review_Trigger")
+                    sheet.update_cell(row_idx, headers.index("Tries") + 1, current_tries + 1)
+                else:
+                    sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, status)
+                    
+                print(f"Processed grading row successfully. Status set to: {status}")
+            except Exception as e: print(f"Update Error: {e}")
 
 if __name__ == '__main__':
     main()
