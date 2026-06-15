@@ -102,19 +102,16 @@ def save_items_to_bank(sheet_client, comp_code, strand_focus, mcq_list):
     headers = bank.row_values(1)
     new_rows = []
     
-    # Normalize headers for foolproof matching
     clean_headers = [str(h).strip().lower().replace(" ", "_") for h in headers]
     
     for q in mcq_list:
         item_id = f"{comp_code}-{str(uuid.uuid4())[:6]}"
-        
-        # Store with safe, predictable keys
         row_data = {
             "item_id": item_id,
             "topic_focus": comp_code,
             "strand_focus": strand_focus,
             "question": format_math_text(q.question),
-            "question_text": format_math_text(q.question), # Failsafe alternative
+            "question_text": format_math_text(q.question),
             "option_a": format_math_text(q.option_a),
             "option_b": format_math_text(q.option_b),
             "option_c": format_math_text(q.option_c),
@@ -155,13 +152,16 @@ def get_lecture_prompt(curr, strand_focus):
     🛑 FORMATTING RULES: 
     - NO RAW LATEX ALLOWED. Do NOT use $.
     - USE UNICODE MATH TYPOGRAPHY: Make it look like a math textbook using unicode characters. Use mathematical italics for variables (e.g., 𝑥, 𝑦, 𝑛), proper superscripts for exponents (e.g., 𝑥², 𝑦³), and standard operators (×, ÷, ≤, ≥, ≠).
+    - ABSOLUTELY NO HTML TAGS. Do NOT use <br>, <b>, <i>, <ul>, <li>, <sup>, or <sub>. 
+    - Use literal paragraph breaks (double spacing) and standard bullet points (•) so the text renders cleanly in a Google Form description.
     
     🛑 LENGTH & STYLE MANDATE:
     - The 'lecture_content' MUST be comprehensive, acting as a standalone textbook chapter.
-    - Use HTML tags (<br>, <b>, <i>, <ul>, <li>) to structure the text cleanly for email delivery.
     - Provide at least 3 detailed, step-by-step real-world {strand_focus} business examples.
-    - 📺 YOUTUBE INTEGRATION: At the very end of the lecture_content, determine the best possible YouTube search query for this specific math topic, and inject this exact HTML block so students can click it to watch videos:
-      <br><br><b>📺 Recommended Video Lessons:</b> <a href="https://www.youtube.com/results?search_query=YOUR+URL+ENCODED+SEARCH+QUERY+HERE">Click here to search YouTube for video tutorials on this topic!</a>
+    - 📺 YOUTUBE INTEGRATION: At the very end of the lecture_content, determine the best possible YouTube search query for this specific math topic, and output the raw URL. Format it EXACTLY like this so it becomes clickable:
+      
+      📺 Recommended Video Lessons:
+      https://www.youtube.com/results?search_query=YOUR+URL+ENCODED+SEARCH+QUERY+HERE
     """
 
 def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode=False):
@@ -204,14 +204,13 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
         
     current_index = 4
     if instruction_body:
+        # Instruction body is now safe plain text and raw URLs
         requests.append({"createItem": {"item": {"title": instruction_title, "description": format_math_text(instruction_body), "textItem": {}}, "location": {"index": current_index}}})
         current_index += 1
     
     for i, q in enumerate(combined_quiz):
         if isinstance(q, dict):
-            # Normalize dictionary keys to prevent header typos from breaking the form
             safe_q = {str(k).strip().lower().replace(" ", "_"): str(v) for k, v in q.items()}
-            
             q_text = format_math_text(safe_q.get('question', safe_q.get('question_text', '')))
             opts = [
                 f"A) {format_math_text(safe_q.get('option_a', ''))}", 
@@ -223,7 +222,6 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
             q_text = format_math_text(q.question)
             opts = [f"A) {format_math_text(q.option_a)}", f"B) {format_math_text(q.option_b)}", f"C) {format_math_text(q.option_c)}", f"D) {format_math_text(q.option_d)}"]
 
-        # Absolute fallback if text is still empty
         if not q_text.strip():
             q_text = f"Question {i+1} [Error: Question text missing from database]"
 
@@ -264,7 +262,6 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     cell_updates = []
     
     for idx, item in enumerate(answer_keys):
-        # Normalize item keys for grading
         safe_item = {str(k).strip().lower().replace(" ", "_"): v for k, v in item.items()}
         
         ans = str(safe_item.get('correct_answer', '')).strip().upper()
