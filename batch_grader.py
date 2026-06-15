@@ -61,6 +61,7 @@ def fetch_student_from_roster(sheet_client, student_id):
 def format_math_text(text):
     if not text: return ""
     text = str(text)
+    # Serves as a safety net if Gemini slips up and uses raw latex
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
     replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": ""}
     for old, new in replacements.items():
@@ -123,7 +124,6 @@ def save_items_to_bank(sheet_client, comp_code, strand_focus, mcq_list):
             "Item_Status": "NEW"
         }
         
-        # Ensure data falls into the exact correct columns based on the header dynamically
         ordered_row = [row_data.get(h, "") for h in headers]
         if not headers:
             ordered_row = list(row_data.values())
@@ -144,21 +144,25 @@ def get_lecture_prompt(curr, strand_focus):
     Performance Standard: {curr.get('performance_standard', '')}
     Learning Competency: {curr.get('learning_competency', '')}
     
-    🛑 FORMATTING RULES: NO LATEX ALLOWED. Do NOT use $, \\frac, \\times, or \\div. 
-    Write fractions cleanly as plain text: a/b (e.g., 1/4). Use Unicode symbols: ×, ÷, =, %, ₱.
+    🛑 FORMATTING RULES: 
+    - NO RAW LATEX ALLOWED. Do NOT use $.
+    - USE UNICODE MATH TYPOGRAPHY: Make it look like a math textbook using unicode characters. Use mathematical italics for variables (e.g., 𝑥, 𝑦, 𝑛), proper superscripts for exponents (e.g., 𝑥², 𝑦³), and standard operators (×, ÷, ≤, ≥, ≠).
     
     🛑 LENGTH & STYLE MANDATE:
     - The 'lecture_content' MUST be comprehensive, acting as a standalone textbook chapter.
-    - Use Markdown formatting: Use bolding, bullet points, and numbered lists to break up the text.
+    - Use HTML tags (<br>, <b>, <i>, <ul>, <li>) to structure the text cleanly for email delivery.
     - Provide at least 3 detailed, step-by-step real-world {strand_focus} business examples.
-    - Do NOT literally type the words "Double line break". Actually use newline characters (\\n\\n) to format paragraphs cleanly.
+    - 📺 YOUTUBE INTEGRATION: At the very end of the lecture_content, determine the best possible YouTube search query for this specific math topic, and inject this exact HTML block so students can click it to watch videos:
+      <br><br><b>📺 Recommended Video Lessons:</b> <a href="https://www.youtube.com/results?search_query=YOUR+URL+ENCODED+SEARCH+QUERY+HERE">Click here to search YouTube for video tutorials on this topic!</a>
     """
 
 def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode=False):
     difficulty_context = "CRITICAL THINKING & ADVANCED ANALYSIS ONLY." if hard_mode else "Standard high school difficulty."
     base_prompt = """
-    🛑 CRITICAL MATH FORMATTING RULES: NO LATEX ALLOWED. Do NOT use $, \\frac, \\times, or \\div. 
-    Write fractions cleanly as plain text: a/b (e.g., 1/4). Use Unicode symbols: ×, ÷, =, %, ₱.
+    🛑 CRITICAL MATH FORMATTING RULES: 
+    - NO RAW LATEX ALLOWED. Do NOT use $. 
+    - USE UNICODE MATH TYPOGRAPHY: Use unicode italic characters for variables (𝑥, 𝑦, 𝑛), superscripts for exponents (², ³), and standard operators (×, ÷, ≤, ≠, ±).
+    - Write fractions cleanly as plain text: a/b (e.g., 1/4).
     """
     
     tos_context = ""
@@ -203,10 +207,11 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
             q_text = format_math_text(q.question)
             opts = [f"A) {format_math_text(q.option_a)}", f"B) {format_math_text(q.option_b)}", f"C) {format_math_text(q.option_c)}", f"D) {format_math_text(q.option_d)}"]
 
+        # 🛑 The Question Label Fix: Removing "Question {i+1}" and placing q_text directly as the title
         requests.append({
             "createItem": {
                 "item": {
-                    "title": f"Question {i+1}", "description": q_text,
+                    "title": q_text, 
                     "questionItem": {"question": {"required": True, "choiceQuestion": {"type": "RADIO", "options": [{"value": o} for o in opts]}}}
                 },
                 "location": {"index": current_index}
