@@ -122,10 +122,29 @@ def get_generation_prompt(curr, strand_focus, missing_count, is_exam, hard_mode=
     🛑 CRITICAL MATH FORMATTING RULES: NO LATEX ALLOWED. Do NOT use $, \\frac, \\times, or \\div. 
     Write fractions cleanly as plain text: a/b (e.g., 1/4). Use Unicode symbols: ×, ÷, =, %, ₱.
     """
+    
+    curriculum_context = f"""
+    Content Domain: {curr.get('content', 'Business Math')}
+    Performance Standard: {curr.get('performance_standard', '')}
+    Learning Competency: {curr.get('learning_competency', '')}
+    """
+
     if is_exam:
-        return f"Generate exactly {missing_count} brand new MCQs for competency: {curr['learning_competency']} ({strand_focus} track).\nDIFFICULTY: {difficulty_context}\n{base_prompt}"
+        return f"""
+        Generate EXACTLY {missing_count} brand new MCQs for the following standard ({strand_focus} track):
+        {curriculum_context}
+        DIFFICULTY: {difficulty_context}
+        {base_prompt}
+        🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
+        """
     else:
-        return f"Create a self-paced module for competency: {curr['learning_competency']} ({strand_focus} track).\n{base_prompt}\nBreak text with clear double line breaks."
+        return f"""
+        Create a self-paced module for the following standard ({strand_focus} track):
+        {curriculum_context}
+        {base_prompt}
+        Break text with clear double line breaks.
+        🛑 MANDATORY QUIZ LENGTH: You MUST generate EXACTLY {missing_count} multiple-choice questions in the 'quiz' array. Do not stop at 5. Do not truncate. You must output all {missing_count} questions.
+        """
 
 def update_dynamic_form(comp_code, instruction_title, instruction_body, combined_quiz, form_service, form_id):
     form = form_service.forms().get(formId=form_id).execute()
