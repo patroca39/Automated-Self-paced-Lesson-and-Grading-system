@@ -61,7 +61,6 @@ def fetch_student_from_roster(sheet_client, student_id):
 def format_math_text(text):
     if not text: return ""
     text = str(text)
-    # Serves as a safety net if Gemini slips up and uses raw latex
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
     replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": ""}
     for old, new in replacements.items():
@@ -103,29 +102,38 @@ def save_items_to_bank(sheet_client, comp_code, strand_focus, mcq_list):
     headers = bank.row_values(1)
     new_rows = []
     
+    # Normalize headers for foolproof matching
+    clean_headers = [str(h).strip().lower().replace(" ", "_") for h in headers]
+    
     for q in mcq_list:
         item_id = f"{comp_code}-{str(uuid.uuid4())[:6]}"
+        
+        # Store with safe, predictable keys
         row_data = {
-            "Item_ID": item_id,
-            "Topic_Focus": comp_code,
-            "Strand_Focus": strand_focus,
-            "Question": format_math_text(q.question),
-            "Option_A": format_math_text(q.option_a),
-            "Option_B": format_math_text(q.option_b),
-            "Option_C": format_math_text(q.option_c),
-            "Option_D": format_math_text(q.option_d),
-            "Correct_Answer": q.correct_answer.strip().upper(),
-            "Difficulty": q.difficulty,
-            "Sub_Concept": q.sub_concept,
-            "Targeted_Remediation": format_math_text(q.targeted_remediation),
-            "Total_Attempts": 0,
-            "Total_Correct": 0,
-            "Difficulty_Index": 0.0,
-            "Item_Status": "NEW"
+            "item_id": item_id,
+            "topic_focus": comp_code,
+            "strand_focus": strand_focus,
+            "question": format_math_text(q.question),
+            "question_text": format_math_text(q.question), # Failsafe alternative
+            "option_a": format_math_text(q.option_a),
+            "option_b": format_math_text(q.option_b),
+            "option_c": format_math_text(q.option_c),
+            "option_d": format_math_text(q.option_d),
+            "correct_answer": q.correct_answer.strip().upper(),
+            "difficulty": q.difficulty,
+            "sub_concept": q.sub_concept,
+            "targeted_remediation": format_math_text(q.targeted_remediation),
+            "total_attempts": 0,
+            "total_correct": 0,
+            "difficulty_index": 0.0,
+            "item_status": "NEW"
         }
         
-        ordered_row = [row_data.get(h, "") for h in headers]
-        if not headers:
+        ordered_row = []
+        if headers:
+            for ch in clean_headers:
+                ordered_row.append(row_data.get(ch, ""))
+        else:
             ordered_row = list(row_data.values())
             
         new_rows.append(ordered_row)
@@ -201,13 +209,24 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
     
     for i, q in enumerate(combined_quiz):
         if isinstance(q, dict):
-            q_text = format_math_text(q.get('Question', q.get('Question_Text')))
-            opts = [f"A) {format_math_text(q.get('Option_A'))}", f"B) {format_math_text(q.get('Option_B'))}", f"C) {format_math_text(q.get('Option_C'))}", f"D) {format_math_text(q.get('Option_D'))}"]
+            # Normalize dictionary keys to prevent header typos from breaking the form
+            safe_q = {str(k).strip().lower().replace(" ", "_"): str(v) for k, v in q.items()}
+            
+            q_text = format_math_text(safe_q.get('question', safe_q.get('question_text', '')))
+            opts = [
+                f"A) {format_math_text(safe_q.get('option_a', ''))}", 
+                f"B) {format_math_text(safe_q.get('option_b', ''))}", 
+                f"C) {format_math_text(safe_q.get('option_c', ''))}", 
+                f"D) {format_math_text(safe_q.get('option_d', ''))}"
+            ]
         else:
             q_text = format_math_text(q.question)
             opts = [f"A) {format_math_text(q.option_a)}", f"B) {format_math_text(q.option_b)}", f"C) {format_math_text(q.option_c)}", f"D) {format_math_text(q.option_d)}"]
 
-        # 🛑 The Question Label Fix: Removing "Question {i+1}" and placing q_text directly as the title
+        # Absolute fallback if text is still empty
+        if not q_text.strip():
+            q_text = f"Question {i+1} [Error: Question text missing from database]"
+
         requests.append({
             "createItem": {
                 "item": {
@@ -228,7 +247,6 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     headers = all_data[0]
     
     answer_keys = []
-    # Identify the matching rows and their exact location for batch updates
     for idx, row in enumerate(all_data[1:], start=2):
         if str(row[headers.index("Topic_Focus")]).strip().upper() == comp_code.strip().upper() and \
            str(row[headers.index("Strand_Focus")]).strip().upper() == strand_focus.strip().upper():
@@ -246,13 +264,15 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     cell_updates = []
     
     for idx, item in enumerate(answer_keys):
-        ans = str(item.get('Correct_Answer', '')).strip().upper()
+        # Normalize item keys for grading
+        safe_item = {str(k).strip().lower().replace(" ", "_"): v for k, v in item.items()}
+        
+        ans = str(safe_item.get('correct_answer', '')).strip().upper()
         row_idx = item['_row_idx']
         
-        # Safely extract existing analytics
-        try: attempts = int(item.get('Total_Attempts', 0))
+        try: attempts = int(safe_item.get('total_attempts', 0))
         except ValueError: attempts = 0
-        try: corrects = int(item.get('Total_Correct', 0))
+        try: corrects = int(safe_item.get('total_correct', 0))
         except ValueError: corrects = 0
         
         attempts += 1
@@ -261,11 +281,10 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
             correct_count += 1
             corrects += 1
         else:
-            sub = item.get('Sub_Concept', f'Concept {idx+1}')
-            rem = item.get('Targeted_Remediation', 'Review this concept.')
+            sub = safe_item.get('sub_concept', f'Concept {idx+1}')
+            rem = safe_item.get('targeted_remediation', 'Review this concept.')
             feedback_blocks.append(f"• {sub}: {rem}")
 
-        # --- LIVE DEPED CTT CALCULATION ---
         p_index = round(corrects / attempts, 2) if attempts > 0 else 0.0
         
         if p_index < 0.26:
@@ -275,7 +294,6 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
         else:
             status = "RETAIN (Good)"
             
-        # Queue the gspread batch update targets
         if "Total_Attempts" in headers:
             cell_updates.append(gspread.Cell(row_idx, headers.index("Total_Attempts") + 1, attempts))
             cell_updates.append(gspread.Cell(row_idx, headers.index("Total_Correct") + 1, corrects))
@@ -284,7 +302,6 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
 
     score = int((correct_count / len(answer_keys)) * 100)
     
-    # Push all analytics to Google Sheets in one rapid call
     if cell_updates:
         bank.update_cells(cell_updates)
         
@@ -295,7 +312,6 @@ def main():
     sheet_client, drive_service, form_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
-    # Check for DepEd Item Analysis Rules
     tos_rules = None
     if os.path.exists("item_analysis_rules.json"):
         with open("item_analysis_rules.json", "r") as f:
@@ -314,7 +330,6 @@ def main():
         curr = curr_data.get(comp_code)
         if not curr: continue
 
-        # --- STEP 1: INITIAL CONTENT & FORM GENERATION ---
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
@@ -355,10 +370,8 @@ def main():
                     vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
                     instruction_body = vault.get('Lecture_Content', '') if vault else ""
                 else:
-                    # Zero-credit fallback for Exams
                     instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
 
-            # --- THE SLICER: Determine which questions to show based on the Try count ---
             try:
                 try_count = int(row.get("Tries", 1))
             except ValueError:
@@ -367,10 +380,8 @@ def main():
             display_limit = rules.get("display_count", 10)
             
             if try_count == 1:
-                # Try 1: Grab questions 1 through 10
                 final_form_quiz = combined_quiz[:display_limit]
             elif try_count == 2:
-                # Try 2 (Remediation): Grab questions 11 through 20
                 final_form_quiz = combined_quiz[display_limit:(display_limit*2)]
             else:
                 final_form_quiz = combined_quiz[:display_limit]
@@ -378,16 +389,14 @@ def main():
             try:
                 form_url = update_dynamic_form(comp_code, instruction_title, instruction_body, final_form_quiz, form_service, DYNAMIC_FORM_ID)
                 sheet.update_cell(row_idx, headers.index("Form_URL") + 1, form_url)
-                # n8n looks for "DEPLOYED" status to automatically pull emails and route the form
                 sheet.update_cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
                 print(f"Form Deployed for {comp_code}. Handing off to n8n for email distribution.")
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
-        # --- STEP 2 & 4: MULTI-TRY GRADING AND REMEDIATION ENGINE ---
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
-            if not student_id: continue  # Ghost row gate
+            if not student_id: continue 
                 
             digital_answers = str(row.get("Digital_Answers", "")).strip()
             if not digital_answers: continue
@@ -399,7 +408,6 @@ def main():
             
             strand_focus = str(profile.get("Strand_Focus", "ABM")).strip().upper()
             
-            # Extract try count safely (defaults to Try 1 if left empty)
             try:
                 current_tries = int(row.get("Tries", 1))
             except ValueError:
@@ -414,13 +422,11 @@ def main():
                 
             mastery_threshold = curr.get("mastery_threshold", 75)
             
-            # Logic branch depending on score performance
             if score >= mastery_threshold:
                 status = "Excelling" if score >= 90 else "Passing"
                 vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
                 final_feedback = vault.get('Enrichment_Text', "Passed successfully!") if vault else "Passed successfully!"
             else:
-                # Flagged for Remediation
                 status = "Needs Review"
                 vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
                 final_feedback = format_math_text(vault.get('Remediation_Scaffolding', diag_feedback)) if vault else diag_feedback
@@ -429,9 +435,7 @@ def main():
                 sheet.update_cell(row_idx, headers.index("Score") + 1, score)
                 sheet.update_cell(row_idx, headers.index("Remediation") + 1, final_feedback)
                 
-                # --- AUTOMATED ATTEMPT ROUTING LATCH ---
                 if status == "Needs Review" and current_tries < 2:
-                    # n8n watches for "Needs Review_Trigger" to route specialized materials or re-send links
                     sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, "Needs Review_Trigger")
                     sheet.update_cell(row_idx, headers.index("Tries") + 1, current_tries + 1)
                 else:
