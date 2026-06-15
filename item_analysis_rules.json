@@ -1,0 +1,20 @@
+{
+  "DepEd_TOS_Distribution": {
+    "description": "Target percentage split across cognitive domains for Exams.",
+    "Remembering_Understanding": 40,
+    "Applying_Analyzing": 40,
+    "Evaluating_Creating": 20
+  },
+  "Item_Difficulty": {
+    "calculation": "(Total Correct) / (Total Students)",
+    "threshold_hard": 0.25,
+    "threshold_easy": 0.76,
+    "action_out_of_bounds": "FLAG_FOR_REVISION"
+  },
+  "Item_Discrimination": {
+    "calculation": "(Upper Group Correct Rate) - (Lower Group Correct Rate)",
+    "target_minimum": 0.46,
+    "action_below_minimum": "FLAG_FOR_REVISION",
+    "action_negative": "AUTO_DISCARD"
+  }
+}
