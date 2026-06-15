@@ -101,15 +101,37 @@ def fetch_banked_questions(sheet_client, comp_code, strand_focus):
 
 def save_items_to_bank(sheet_client, comp_code, strand_focus, mcq_list):
     bank = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
+    headers = bank.row_values(1)
     new_rows = []
+    
     for q in mcq_list:
         item_id = f"{comp_code}-{str(uuid.uuid4())[:6]}"
-        new_rows.append([
-            item_id, comp_code, strand_focus, format_math_text(q.question), 
-            format_math_text(q.option_a), format_math_text(q.option_b), format_math_text(q.option_c), format_math_text(q.option_d), 
-            q.correct_answer.strip().upper(), q.difficulty, 0,
-            q.sub_concept, format_math_text(q.targeted_remediation)
-        ])
+        row_data = {
+            "Item_ID": item_id,
+            "Topic_Focus": comp_code,
+            "Strand_Focus": strand_focus,
+            "Question": format_math_text(q.question),
+            "Option_A": format_math_text(q.option_a),
+            "Option_B": format_math_text(q.option_b),
+            "Option_C": format_math_text(q.option_c),
+            "Option_D": format_math_text(q.option_d),
+            "Correct_Answer": q.correct_answer.strip().upper(),
+            "Difficulty": q.difficulty,
+            "Sub_Concept": q.sub_concept,
+            "Targeted_Remediation": format_math_text(q.targeted_remediation),
+            "Total_Attempts": 0,
+            "Total_Correct": 0,
+            "Difficulty_Index": 0.0,
+            "Item_Status": "NEW"
+        }
+        
+        # Ensure data falls into the exact correct columns based on the header dynamically
+        ordered_row = [row_data.get(h, "") for h in headers]
+        if not headers:
+            ordered_row = list(row_data.values())
+            
+        new_rows.append(ordered_row)
+        
     bank.append_rows(new_rows)
 
 def save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data):
@@ -196,8 +218,18 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
 
 def grade_submission_natively(student_answers_str, comp_code, strand_focus, sheet_client):
     bank = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
-    answer_keys = [r for r in bank.get_all_records() if str(r.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(r.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper()]
+    all_data = bank.get_all_values()
+    headers = all_data[0]
     
+    answer_keys = []
+    # Identify the matching rows and their exact location for batch updates
+    for idx, row in enumerate(all_data[1:], start=2):
+        if str(row[headers.index("Topic_Focus")]).strip().upper() == comp_code.strip().upper() and \
+           str(row[headers.index("Strand_Focus")]).strip().upper() == strand_focus.strip().upper():
+            item_dict = dict(zip(headers, row))
+            item_dict['_row_idx'] = idx 
+            answer_keys.append(item_dict)
+            
     if not answer_keys: return None, "", f"Error: Answer keys not found for {comp_code} ({strand_focus})."
         
     student_choices = re.findall(r'([A-D])\)', student_answers_str.upper()) or re.findall(r'\b([A-D])\b', student_answers_str.upper())
@@ -205,17 +237,51 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
 
     correct_count = 0
     feedback_blocks = []
+    cell_updates = []
     
     for idx, item in enumerate(answer_keys):
-        ans = next((item[k] for k in item if k.lower() == 'correct_answer'), "")
-        if idx < len(student_choices) and student_choices[idx] == str(ans).strip().upper():
+        ans = str(item.get('Correct_Answer', '')).strip().upper()
+        row_idx = item['_row_idx']
+        
+        # Safely extract existing analytics
+        try: attempts = int(item.get('Total_Attempts', 0))
+        except ValueError: attempts = 0
+        try: corrects = int(item.get('Total_Correct', 0))
+        except ValueError: corrects = 0
+        
+        attempts += 1
+        
+        if idx < len(student_choices) and student_choices[idx] == ans:
             correct_count += 1
+            corrects += 1
         else:
             sub = item.get('Sub_Concept', f'Concept {idx+1}')
             rem = item.get('Targeted_Remediation', 'Review this concept.')
             feedback_blocks.append(f"• {sub}: {rem}")
 
+        # --- LIVE DEPED CTT CALCULATION ---
+        p_index = round(corrects / attempts, 2) if attempts > 0 else 0.0
+        
+        if p_index < 0.26:
+            status = "REVISE (Too Hard)"
+        elif p_index > 0.75:
+            status = "REVISE (Too Easy)"
+        else:
+            status = "RETAIN (Good)"
+            
+        # Queue the gspread batch update targets
+        if "Total_Attempts" in headers:
+            cell_updates.append(gspread.Cell(row_idx, headers.index("Total_Attempts") + 1, attempts))
+            cell_updates.append(gspread.Cell(row_idx, headers.index("Total_Correct") + 1, corrects))
+            cell_updates.append(gspread.Cell(row_idx, headers.index("Difficulty_Index") + 1, p_index))
+            cell_updates.append(gspread.Cell(row_idx, headers.index("Item_Status") + 1, status))
+
     score = int((correct_count / len(answer_keys)) * 100)
+    
+    # Push all analytics to Google Sheets in one rapid call
+    if cell_updates:
+        bank.update_cells(cell_updates)
+        
     return score, format_math_text("\n".join(feedback_blocks)), None
 
 def main():
