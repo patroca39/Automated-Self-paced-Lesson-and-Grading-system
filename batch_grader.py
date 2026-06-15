@@ -62,7 +62,8 @@ def format_math_text(text):
     if not text: return ""
     text = str(text)
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
-    replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": ""}
+    # The Sweeper: Converts our placeholder into hardcoded carriage returns for Google Forms
+    replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": "", "[NEWLINE]": "\n"}
     for old, new in replacements.items():
         text = text.replace(old, new)
     return text.strip()
@@ -149,19 +150,22 @@ def get_lecture_prompt(curr, strand_focus):
     Performance Standard: {curr.get('performance_standard', '')}
     Learning Competency: {curr.get('learning_competency', '')}
     
-    🛑 FORMATTING RULES: 
+    🛑 FORMATTING RULES (CRITICAL): 
     - NO RAW LATEX ALLOWED. Do NOT use $.
     - USE UNICODE MATH TYPOGRAPHY: Make it look like a math textbook using unicode characters. Use mathematical italics for variables (e.g., 𝑥, 𝑦, 𝑛), proper superscripts for exponents (e.g., 𝑥², 𝑦³), and standard operators (×, ÷, ≤, ≥, ≠).
     - ABSOLUTELY NO HTML TAGS. Do NOT use <br>, <b>, <i>, <ul>, <li>, <sup>, or <sub>. 
-    - Use literal paragraph breaks (double spacing) and standard bullet points (•) so the text renders cleanly in a Google Form description.
+    
+    🛑 THE SPACING FIX (CRITICAL):
+    Because JSON strips invisible return keys, you MUST use the exact placeholder [NEWLINE] wherever you want a line break or paragraph break. 
+    Example Format:
+    "Here is the introduction to the topic.[NEWLINE][NEWLINE]Here are the key points:[NEWLINE]• Point one[NEWLINE]• Point two[NEWLINE][NEWLINE]Let's look at an example."
     
     🛑 LENGTH & STYLE MANDATE:
     - The 'lecture_content' MUST be comprehensive, acting as a standalone textbook chapter.
     - Provide at least 3 detailed, step-by-step real-world {strand_focus} business examples.
-    - 📺 YOUTUBE INTEGRATION: At the very end of the lecture_content, determine the best possible YouTube search query for this specific math topic, and output the raw URL. Format it EXACTLY like this so it becomes clickable:
+    - 📺 YOUTUBE INTEGRATION: At the very end of the lecture_content, determine the best possible YouTube search query for this specific math topic, and output the raw URL EXACTLY like this:
       
-      📺 Recommended Video Lessons:
-      https://www.youtube.com/results?search_query=YOUR+URL+ENCODED+SEARCH+QUERY+HERE
+      [NEWLINE][NEWLINE]📺 Recommended Video Lessons:[NEWLINE]https://www.youtube.com/results?search_query=YOUR+URL+ENCODED+SEARCH+QUERY+HERE
     """
 
 def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode=False):
@@ -204,7 +208,6 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
         
     current_index = 4
     if instruction_body:
-        # Instruction body is now safe plain text and raw URLs
         requests.append({"createItem": {"item": {"title": instruction_title, "description": format_math_text(instruction_body), "textItem": {}}, "location": {"index": current_index}}})
         current_index += 1
     
