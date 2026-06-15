@@ -34,15 +34,13 @@ class MCQ(BaseModel):
     targeted_remediation: str 
     difficulty: str 
 
-class LessonSchema(BaseModel):
+class LessonContentSchema(BaseModel):
     lesson_title: str
     lecture_content: str
     remediation_scaffolding: str  
     enrichment_scenario: str      
-    quiz: list[MCQ]
 
-class ExamSchema(BaseModel):
-    instructions: str
+class QuizSchema(BaseModel):
     quiz: list[MCQ]
 
 def get_google_services():
@@ -138,7 +136,25 @@ def save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data):
     vault = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Modules_Vault")
     vault.append_row([comp_code, strand_focus, lesson_data.lesson_title, format_math_text(lesson_data.lecture_content), format_math_text(lesson_data.remediation_scaffolding), lesson_data.enrichment_scenario])
 
-def get_generation_prompt(curr, strand_focus, missing_count, is_exam, tos_rules=None, hard_mode=False):
+def get_lecture_prompt(curr, strand_focus):
+    return f"""
+    You are an expert master teacher for the {strand_focus} track.
+    Create a highly comprehensive, deeply detailed self-paced reading module for this standard:
+    Content Domain: {curr.get('content', 'Business Math')}
+    Performance Standard: {curr.get('performance_standard', '')}
+    Learning Competency: {curr.get('learning_competency', '')}
+    
+    🛑 FORMATTING RULES: NO LATEX ALLOWED. Do NOT use $, \\frac, \\times, or \\div. 
+    Write fractions cleanly as plain text: a/b (e.g., 1/4). Use Unicode symbols: ×, ÷, =, %, ₱.
+    
+    🛑 LENGTH & STYLE MANDATE:
+    - The 'lecture_content' MUST be comprehensive, acting as a standalone textbook chapter.
+    - Use Markdown formatting: Use bolding, bullet points, and numbered lists to break up the text.
+    - Provide at least 3 detailed, step-by-step real-world {strand_focus} business examples.
+    - Do NOT literally type the words "Double line break". Actually use newline characters (\\n\\n) to format paragraphs cleanly.
+    """
+
+def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode=False):
     difficulty_context = "CRITICAL THINKING & ADVANCED ANALYSIS ONLY." if hard_mode else "Standard high school difficulty."
     base_prompt = """
     🛑 CRITICAL MATH FORMATTING RULES: NO LATEX ALLOWED. Do NOT use $, \\frac, \\times, or \\div. 
@@ -150,36 +166,21 @@ def get_generation_prompt(curr, strand_focus, missing_count, is_exam, tos_rules=
         dist = tos_rules["DepEd_TOS_Distribution"]
         tos_context = f"""
         🛑 MANDATORY TABLE OF SPECIFICATIONS (TOS) DISTRIBUTION:
-        You must distribute the cognitive domains of the generated items as follows:
         - Remembering & Understanding: {dist.get('Remembering_Understanding', 40)}%
         - Applying & Analyzing: {dist.get('Applying_Analyzing', 40)}%
         - Evaluating & Creating: {dist.get('Evaluating_Creating', 20)}%
         """
     
-    curriculum_context = f"""
+    return f"""
+    Generate EXACTLY {missing_count} brand new MCQs for the following standard ({strand_focus} track):
     Content Domain: {curr.get('content', 'Business Math')}
-    Performance Standard: {curr.get('performance_standard', '')}
     Learning Competency: {curr.get('learning_competency', '')}
+    
+    DIFFICULTY: {difficulty_context}
+    {tos_context}
+    {base_prompt}
+    🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
     """
-
-    if is_exam:
-        return f"""
-        Generate EXACTLY {missing_count} brand new MCQs for the following standard ({strand_focus} track):
-        {curriculum_context}
-        DIFFICULTY: {difficulty_context}
-        {tos_context}
-        {base_prompt}
-        🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
-        """
-    else:
-        return f"""
-        Create a self-paced module for the following standard ({strand_focus} track):
-        {curriculum_context}
-        {tos_context}
-        {base_prompt}
-        Break text with clear double line breaks.
-        🛑 MANDATORY QUIZ LENGTH: You MUST generate EXACTLY {missing_count} multiple-choice questions in the 'quiz' array. Do not stop at 5. Do not truncate. You must output all {missing_count} questions.
-        """
 
 def update_dynamic_form(comp_code, instruction_title, instruction_body, combined_quiz, form_service, form_id):
     form = form_service.forms().get(formId=form_id).execute()
@@ -321,20 +322,29 @@ def main():
             instruction_body = ""
 
             if missing_count > 0:
-                gen_prompt = get_generation_prompt(curr, strand_focus, missing_count, not rules["has_lecture"], tos_rules, rules.get("hard_mode", False))
                 if rules["has_lecture"]:
-                    lesson_data = call_gemini_with_retry(gen_prompt, LessonSchema)
-                    if lesson_data:
+                    print(f"Calling Gemini (1/2): Generating comprehensive lecture for {comp_code}...")
+                    lec_prompt = get_lecture_prompt(curr, strand_focus)
+                    lesson_data = call_gemini_with_retry(lec_prompt, LessonContentSchema)
+                    
+                    print(f"Calling Gemini (2/2): Generating {missing_count}-item quiz bank...")
+                    qz_prompt = get_quiz_prompt(curr, strand_focus, missing_count, tos_rules, rules.get("hard_mode", False))
+                    quiz_data = call_gemini_with_retry(qz_prompt, QuizSchema)
+                    
+                    if lesson_data and quiz_data:
                         save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data)
-                        save_items_to_bank(sheet_client, comp_code, strand_focus, lesson_data.quiz)
-                        combined_quiz.extend(lesson_data.quiz)
+                        save_items_to_bank(sheet_client, comp_code, strand_focus, quiz_data.quiz)
+                        combined_quiz.extend(quiz_data.quiz)
                         instruction_body = lesson_data.lecture_content
                 else:
-                    exam_data = call_gemini_with_retry(gen_prompt, ExamSchema)
+                    print(f"Calling Gemini: Generating {missing_count}-item exam bank for {comp_code}...")
+                    qz_prompt = get_quiz_prompt(curr, strand_focus, missing_count, tos_rules, rules.get("hard_mode", False))
+                    exam_data = call_gemini_with_retry(qz_prompt, QuizSchema)
+                    
                     if exam_data:
                         save_items_to_bank(sheet_client, comp_code, strand_focus, exam_data.quiz)
                         combined_quiz.extend(exam_data.quiz)
-                        instruction_body = exam_data.instructions
+                        instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
             else:
                 if rules["has_lecture"]:
                     vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
