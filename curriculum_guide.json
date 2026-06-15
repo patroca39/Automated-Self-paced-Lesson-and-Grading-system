@@ -1,154 +1,364 @@
 {
   "ABM_BM11": {
     "FO-Ia-1": {
-      "topic": "Fundamental Operations",
-      "content_standard": "Fractions, decimals, and percentage",
-      "performance_standard": "Perform operations accurately and solve business-related problems",
-      "learning_competency": "Perform fundamental operations on fractions and decimals.",
-      "cognitive_level": "Easy",
-      "weight": 0.1,
-      "scaffolding_steps": ["Review place value", "Guided decimal alignment", "Independent calculation"],
-      "dll_fields": {
-        "objectives": "Perform operations on fractions and decimals.",
-        "procedure_mastery": "Drill on decimal placement and arithmetic.",
-        "evaluation": "Formative quiz on fractional arithmetic."
-      },
+      "content": "Fundamental Operations on: Fractions, Decimals, Percentage",
+      "content_standard": "The learners demonstrate an understanding of: 1. fractions 2. decimals and percentage",
+      "performance_standard": "The learners are able to: 1. Perform operations: addition, subtraction, multiplication and division accurately 2. Solve problems involving fractions, decimals and percent related to business",
+      "learning_competency": "1. Perform fundamental operations on fractions and decimals",
+      "code": "ABM_BM11FO-Ia-1",
       "mastery_threshold": 75
     },
     "FO-Ia-2": {
-      "topic": "Fundamental Operations",
-      "content_standard": "Fractions, decimals, and percentage",
-      "performance_standard": "Convert between fraction, decimal, and percent forms",
-      "learning_competency": "Express fractions to decimals and percent forms and vice versa.",
-      "cognitive_level": "Easy",
-      "weight": 0.1,
-      "scaffolding_steps": ["Review fraction-to-decimal logic", "Interactive conversion exercises", "Real-world business rate conversion"],
-      "dll_fields": {
-        "objectives": "Convert fractions, decimals, and percentages.",
-        "procedure_mastery": "Conversion drills.",
-        "evaluation": "Error-analysis task on conversion."
-      },
+      "content": "Fundamental Operations on: Fractions, Decimals, Percentage",
+      "content_standard": "The learners demonstrate an understanding of: 1. fractions 2. decimals and percentage",
+      "performance_standard": "The learners are able to: 1. Perform operations: addition, subtraction, multiplication and division accurately 2. Solve problems involving fractions, decimals and percent related to business",
+      "learning_competency": "2. Express fractions to decimals and percent forms and vice versa",
+      "code": "ABM_BM11FO-Ia-2",
       "mastery_threshold": 75
     },
+    "FO-Ib-3": {
+      "content": "Fundamental Operations on: Fractions, Decimals, Percentage",
+      "content_standard": "The learners demonstrate an understanding of: 1. fractions 2. decimals and percentage",
+      "performance_standard": "The learners are able to: 1. Perform operations: addition, subtraction, multiplication and division accurately 2. Solve problems involving fractions, decimals and percent related to business",
+      "learning_competency": "3. Illustrate how decimals and fractions can be written in terms of percent",
+      "code": "ABM_BM11FO-Ib-3",
+      "mastery_threshold": 75
+    },
+    "FO-Ic-4": {
+      "content": "Fundamental Operations on: Fractions, Decimals, Percentage",
+      "content_standard": "The learners demonstrate an understanding of: 1. fractions 2. decimals and percentage",
+      "performance_standard": "The learners are able to: 1. Perform operations: addition, subtraction, multiplication and division accurately 2. Solve problems involving fractions, decimals and percent related to business",
+      "learning_competency": "4. Give real-life situations to illustrate fractions, decimals, and percent",
+      "code": "ABM_BM11FO-Ic-4",
+      "mastery_threshold": 80
+    },
+    "FO-Id-5": {
+      "content": "Fundamental Operations on: Fractions, Decimals, Percentage",
+      "content_standard": "The learners demonstrate an understanding of: 1. fractions 2. decimals and percentage",
+      "performance_standard": "The learners are able to: 1. Perform operations: addition, subtraction, multiplication and division accurately 2. Solve problems involving fractions, decimals and percent related to business",
+      "learning_competency": "5. Solve problems involving fractions, decimals, and percent",
+      "code": "ABM_BM11FO-Id-5",
+      "mastery_threshold": 80
+    },
     "RP-Ie-1": {
-      "topic": "Ratio and Proportion",
-      "content_standard": "Ratio and Rate",
-      "performance_standard": "Compare and differentiate ratio and rate",
-      "learning_competency": "Compare and differentiate ratio and rate.",
-      "cognitive_level": "Easy",
-      "weight": 0.1,
-      "scaffolding_steps": ["Define ratio", "Identify rate vs ratio", "Apply to business rates"],
-      "dll_fields": {
-        "objectives": "Differentiate ratio and rate in business contexts.",
-        "procedure_mastery": "Analyze business price-to-quantity rates.",
-        "evaluation": "Identification test on ratio vs rate."
-      },
+      "content": "Ratio & Proportion",
+      "content_standard": "key concepts of ratio and proportion",
+      "performance_standard": "1. formulate and solve problems involving ratio and proportion 2. use the concept of proportion in making life decisions",
+      "learning_competency": "1. Compare and differentiate ratio and rate",
+      "code": "ABM_BM11RP-Ie-1",
+      "mastery_threshold": 75
+    },
+    "RP-Ie-2": {
+      "content": "Ratio & Proportion",
+      "content_standard": "key concepts of ratio and proportion",
+      "performance_standard": "1. formulate and solve problems involving ratio and proportion 2. use the concept of proportion in making life decisions",
+      "learning_competency": "2. Write proportions illustrating real-life situations",
+      "code": "ABM_BM11RP-Ie-2",
+      "mastery_threshold": 80
+    },
+    "RP-Ie-3": {
+      "content": "Ratio & Proportion",
+      "content_standard": "key concepts of ratio and proportion",
+      "performance_standard": "1. formulate and solve problems involving ratio and proportion 2. use the concept of proportion in making life decisions",
+      "learning_competency": "3. Identify the different kinds of proportion and give examples for each",
+      "code": "ABM_BM11RP-Ie-3",
       "mastery_threshold": 75
     },
     "RP-If-4": {
-      "topic": "Ratio and Proportion",
-      "content_standard": "Proportion",
-      "performance_standard": "Solve problems involving direct, inverse, and partitive proportion",
-      "learning_competency": "Solve problems involving direct, inverse and partitive proportion.",
-      "cognitive_level": "Average",
-      "weight": 0.1,
-      "scaffolding_steps": ["Setup proportion equations", "Guided solving", "Real-world proportion word problems"],
-      "dll_fields": {
-        "objectives": "Solve direct, inverse, and partitive proportion.",
-        "procedure_mastery": "Step-by-step proportion solving.",
-        "evaluation": "Problem-solving assessment."
-      },
-      "mastery_threshold": 75
+      "content": "Ratio & Proportion",
+      "content_standard": "key concepts of ratio and proportion",
+      "performance_standard": "1. formulate and solve problems involving ratio and proportion 2. use the concept of proportion in making life decisions",
+      "learning_competency": "4. Solve problems involving direct, inverse and partitive proportion",
+      "code": "ABM_BM11RP-If-4",
+      "mastery_threshold": 80
     },
     "BS-Ig-1": {
-      "topic": "Buying and Selling",
-      "content_standard": "Mark-on, mark-down, mark-up",
-      "performance_standard": "Analyze and solve problems on mark-up, mark-down, and mark-on",
-      "learning_competency": "Differentiate Mark-on, Mark-down and Mark-up.",
-      "cognitive_level": "Average",
-      "weight": 0.2,
-      "scaffolding_steps": ["Define pricing strategies", "Guided markup computation", "Comparative pricing analysis"],
-      "dll_fields": {
-        "objectives": "Compute and differentiate pricing strategies.",
-        "procedure_mastery": "Business scenario simulations.",
-        "evaluation": "Case study analysis."
-      },
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "1. Differentiate Mark-on, Mark down and Mark-up",
+      "code": "ABM_BM11BS-Ig-1",
       "mastery_threshold": 75
     },
+    "BS-Ih-2": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "2. Illustrate how Mark-on, Mark-down, and Mark-up are obtained",
+      "code": "ABM_BM11BS-Ih-2",
+      "mastery_threshold": 75
+    },
+    "BS-Ih-3": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "3. Differentiate mark-up from margins",
+      "code": "ABM_BM11BS-Ih-3",
+      "mastery_threshold": 75
+    },
+    "BS-Ih-4": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "4. Describe how gross margins is used in sales",
+      "code": "ABM_BM11BS-Ih-4",
+      "mastery_threshold": 75
+    },
+    "BS-Ih-5": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "5. Illustrate how to compute single trade discounts and discount series",
+      "code": "ABM_BM11BS-Ih-5",
+      "mastery_threshold": 80
+    },
+    "BS-Ii-6": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "6. Differentiate profit from loss",
+      "code": "ABM_BM11BS-Ii-6",
+      "mastery_threshold": 75
+    },
+    "BS-Ii-7": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "7. Illustrate how profit is obtained and how to avoid loss in a given transaction",
+      "code": "ABM_BM11BS-Ii-7",
+      "mastery_threshold": 80
+    },
     "BS-Ij-8": {
-      "topic": "Break-Even Analysis",
-      "content_standard": "Break-even point",
-      "performance_standard": "Illustrate how to determine break-even point",
-      "learning_competency": "Define break-even; illustrate how to determine break-even point.",
-      "cognitive_level": "Difficult",
-      "weight": 0.1,
-      "scaffolding_steps": ["Define costs/revenue", "Graph cost/revenue intersection", "Solve break-even algebra"],
-      "dll_fields": {
-        "objectives": "Calculate break-even point mathematically.",
-        "procedure_mastery": "Cost-Volume-Profit analysis.",
-        "evaluation": "Business plan break-even test."
-      },
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "8. Define break-even; illustrate how to determine break-even point",
+      "code": "ABM_BM11BS-Ij-8",
+      "mastery_threshold": 80
+    },
+    "BS-Ij-9": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "9. Solve problems involving buying and selling products",
+      "code": "ABM_BM11BS-Ij-9",
+      "mastery_threshold": 80
+    },
+    "BS-Ij-10": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "10. Illustrate how interest is computed specifically as applied to mortgage, amortization, and on services/utilities and on deposits and loans",
+      "code": "ABM_BM11BS-Ij-10",
+      "mastery_threshold": 80
+    },
+    "BS-IIa-11": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "11. Illustrate the different types of commissions",
+      "code": "ABM_BM11BS-IIa-11",
+      "mastery_threshold": 75
+    },
+    "BS-IIa-12": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "12. Compute commissions on cash basis and commission on instalment basis",
+      "code": "ABM_BM11BS-IIa-12",
+      "mastery_threshold": 80
+    },
+    "BS-IIa-13": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "13. Illustrate how to obtain down payment, gross balance, and current increased balance",
+      "code": "ABM_BM11BS-IIa-13",
+      "mastery_threshold": 80
+    },
+    "BS-IIb-14": {
+      "content": "Buying and Selling",
+      "content_standard": "key concepts in buying and selling",
+      "performance_standard": "Analyze and solve problems on important factors in managing a business: buying products and selling products",
+      "learning_competency": "14. Solve problems involving interests and commissions",
+      "code": "ABM_BM11BS-IIb-14",
       "mastery_threshold": 80
     },
     "SW-IIc-1": {
-      "topic": "Salaries and Wages",
-      "content_standard": "Salary, wage, income, benefits",
-      "performance_standard": "Compute gross and net earnings",
-      "learning_competency": "Define salary, wage, income, benefits.",
-      "cognitive_level": "Easy",
-      "weight": 0.1,
-      "scaffolding_steps": ["Identify payroll terms", "Explain statutory benefits", "Analyze pay slips"],
-      "dll_fields": {
-        "objectives": "Distinguish between earnings and deductions.",
-        "procedure_mastery": "Payroll terminology mapping.",
-        "evaluation": "Definition and identification quiz."
-      },
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "1. Define salary, wage, income, benefits",
+      "code": "ABM_BM11SW-IIc-1",
       "mastery_threshold": 75
     },
     "SW-IId-2": {
-      "topic": "Salaries and Wages",
-      "content_standard": "Gross and Net Earnings",
-      "performance_standard": "Compute gross and net earnings including deductions",
-      "learning_competency": "Compute gross and net earnings.",
-      "cognitive_level": "Average",
-      "weight": 0.1,
-      "scaffolding_steps": ["Calculate gross earnings", "Determine deductions", "Compute net take-home pay"],
-      "dll_fields": {
-        "objectives": "Compute accurate net earnings.",
-        "procedure_mastery": "Payroll calculation drills.",
-        "evaluation": "Payroll computation assessment."
-      },
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "2. Compute gross and net earnings",
+      "code": "ABM_BM11SW-IId-2",
+      "mastery_threshold": 80
+    },
+    "SW-IId-3": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "3. Differentiate gross from net earnings",
+      "code": "ABM_BM11SW-IId-3",
+      "mastery_threshold": 75
+    },
+    "SW-IIe-4": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "4. Enumerate the benefits of a wage earner",
+      "code": "ABM_BM11SW-IIe-4",
+      "mastery_threshold": 75
+    },
+    "SW-IIe-5": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "5. Define each of the benefits given to wage earners",
+      "code": "ABM_BM11SW-IIe-5",
+      "mastery_threshold": 75
+    },
+    "SW-IIe-6": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "6. Distinguishe taxable from nontaxable benefits",
+      "code": "ABM_BM11SW-IIe-6",
+      "mastery_threshold": 75
+    },
+    "SW-IIe-7": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "7. Enumerate the standard deductions with the corresponding computation",
+      "code": "ABM_BM11SW- IIe-7",
+      "mastery_threshold": 80
+    },
+    "SW-IIe-8": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "8. Identify the variables needed in the computation of the overtime",
+      "code": "ABM_BM11SW- IIe -8",
+      "mastery_threshold": 75
+    },
+    "SW-IIe-9": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "9. Compute overtime pay",
+      "code": "ABM_BM11SW- IIe -9",
+      "mastery_threshold": 80
+    },
+    "SW-IIf-10": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "10. Use E- spread sheet in the computation of salary and overtime pay",
+      "code": "ABM_BM11SW- IIf -10",
+      "mastery_threshold": 80
+    },
+    "SW-IIf-13": {
+      "content": "Salaries and Wages",
+      "content_standard": "the fundamental operations of mathematics as applied in salaries and wages",
+      "performance_standard": "apply appropriate mathematical operation in computing salaries and wages",
+      "learning_competency": "11. Present graphical representation of the details or particulars of the salary.",
+      "code": "ABM_BM11SW- IIf -13",
+      "mastery_threshold": 80
+    },
+    "PAD-IIg-1": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "1. Show samples of business data",
+      "code": "ABM_BM11PAD-IIg-1",
+      "mastery_threshold": 75
+    },
+    "PAD-IIg-2": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "2. Compare the forms (textual, tabular, and graphical) of data presentation",
+      "code": "ABM_BM11PAD-IIg-2",
+      "mastery_threshold": 75
+    },
+    "PAD-IIg-3": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "3. Identify the essential parts of a table",
+      "code": "ABM_BM11PAD-IIg-3",
+      "mastery_threshold": 75
+    },
+    "PAD-IIh-4": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "4. Draw the table to present the data",
+      "code": "ABM_BM11PAD-IIh-4",
       "mastery_threshold": 80
     },
     "PAD-IIh-5": {
-      "topic": "Business Data Presentation",
-      "content_standard": "Measures of central tendency and variability",
-      "performance_standard": "Analyze and interpret business data using statistical tools",
-      "learning_competency": "Analyze and interpret data using measures of central tendency.",
-      "cognitive_level": "Average",
-      "weight": 0.05,
-      "scaffolding_steps": ["Calculate mean/median/mode", "Apply to business datasets", "Interpret business results"],
-      "dll_fields": {
-        "objectives": "Interpret business trends via central tendency.",
-        "procedure_mastery": "Dataset analysis workshops.",
-        "evaluation": "Report writing on business data trends."
-      },
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "5. Analyze and interprets the data presented in the table using measures of central tendency and variability and tests of significant differences",
+      "code": "ABM_BM11PAD-IIh-5",
+      "mastery_threshold": 80
+    },
+    "PAD-IIi-6": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "6. Describe the different kinds of graphs for data presentation",
+      "code": "ABM_BM11PAD-IIi-6",
+      "mastery_threshold": 75
+    },
+    "PAD-IIi-7": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "7. Describe the essential parts of a graph",
+      "code": "ABM_BM11PAD-IIi-7",
+      "mastery_threshold": 75
+    },
+    "PAD-IIi-8": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "8. Give a set of business data; identify the graphs to be used",
+      "code": "ABM_BM11PAD-IIi-8",
+      "mastery_threshold": 80
+    },
+    "PAD-IIi-9": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "9. Draw the graph/table to present the data",
+      "code": "ABM_BM11PAD-IIi-9",
+      "mastery_threshold": 80
+    },
+    "PAD-IIi-10": {
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "10. Analyze and interpret the data presented in a graph/table",
+      "code": "ABM_BM11PAD-IIi-10",
       "mastery_threshold": 80
     },
     "PAD-IIj-11": {
-      "topic": "Business Data Presentation",
-      "content_standard": "Software applications for data",
-      "performance_standard": "Use software to compute and present graphical representations",
-      "learning_competency": "Use software (MS Excel, etc.) to compute and present graphical business data.",
-      "cognitive_level": "Difficult",
-      "weight": 0.05,
-      "scaffolding_steps": ["Excel basic input", "Graphical representation creation", "Data-to-report finalization"],
-      "dll_fields": {
-        "objectives": "Create professional business graphs via software.",
-        "procedure_mastery": "Hands-on software lab activity.",
-        "evaluation": "Graphical data presentation project."
-      },
-      "mastery_threshold": 85
+      "content": "Presentation and Analysis of Business Data",
+      "content_standard": "business data present them in graphs, charts, and tables",
+      "performance_standard": "solve problems in real-life business situations, present data in graphical form, and analyze them",
+      "learning_competency": "11. Use software (i.e., MS Excel, SPSS) programs to compute and present graphical representation of business data",
+      "code": "ABM_BM11PAD-IIj-11",
+      "mastery_threshold": 80
     }
   }
 }
