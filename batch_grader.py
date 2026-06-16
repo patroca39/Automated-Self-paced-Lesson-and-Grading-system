@@ -388,8 +388,14 @@ def main():
 
             try:
                 form_url = update_dynamic_form(comp_code, instruction_title, instruction_body, final_form_quiz, form_service, DYNAMIC_FORM_ID)
-                sheet.update_cell(row_idx, headers.index("Form_URL") + 1, form_url)
-                sheet.update_cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
+                
+                # --- THE BATCH UPDATE FIX ---
+                update_payload = [
+                    gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
+                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
+                ]
+                sheet.update_cells(update_payload)
+                
                 print(f"Form Deployed for {comp_code}. Handing off to n8n for email distribution.")
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
