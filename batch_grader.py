@@ -13,7 +13,7 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-TEMPLATE_FORM_ID = "16uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" 
+TEMPLATE_FORM_ID = "1fBj7nmWYtblECSFvPMoCZncS1gS3Dhz5D9mEABNVskA" 
 
 ASSESSMENT_RULES = {
     "QUIZ": {"target_count": 20, "display_count": 10, "has_lecture": True},
