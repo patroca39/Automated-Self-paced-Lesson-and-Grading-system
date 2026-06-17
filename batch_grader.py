@@ -13,7 +13,7 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-DYNAMIC_FORM_ID = "16uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" 
+TEMPLATE_FORM_ID = "16uOwbZbu86xWv1o7fl99TrjRRzlhOiyvg-QgybQr3MA" 
 
 ASSESSMENT_RULES = {
     "QUIZ": {"target_count": 20, "display_count": 10, "has_lecture": True},
@@ -62,7 +62,6 @@ def format_math_text(text):
     if not text: return ""
     text = str(text)
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
-    # The Sweeper: Converts our placeholder into hardcoded carriage returns for Google Forms
     replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": "", "[NEWLINE]": "\n"}
     for old, new in replacements.items():
         text = text.replace(old, new)
@@ -152,19 +151,16 @@ def get_lecture_prompt(curr, strand_focus):
     
     🛑 FORMATTING RULES (CRITICAL): 
     - NO RAW LATEX ALLOWED. Do NOT use $.
-    - USE UNICODE MATH TYPOGRAPHY: Make it look like a math textbook using unicode characters. Use mathematical italics for variables (e.g., 𝑥, 𝑦, 𝑛), proper superscripts for exponents (e.g., 𝑥², 𝑦³), and standard operators (×, ÷, ≤, ≥, ≠).
+    - USE UNICODE MATH TYPOGRAPHY.
     - ABSOLUTELY NO HTML TAGS. Do NOT use <br>, <b>, <i>, <ul>, <li>, <sup>, or <sub>. 
     
-    🛑 THE SPACING FIX (CRITICAL):
+    🛑 THE SPACING FIX:
     Because JSON strips invisible return keys, you MUST use the exact placeholder [NEWLINE] wherever you want a line break or paragraph break. 
-    Example Format:
-    "Here is the introduction to the topic.[NEWLINE][NEWLINE]Here are the key points:[NEWLINE]• Point one[NEWLINE]• Point two[NEWLINE][NEWLINE]Let's look at an example."
     
     🛑 LENGTH & STYLE MANDATE:
     - The 'lecture_content' MUST be comprehensive, acting as a standalone textbook chapter.
     - Provide at least 3 detailed, step-by-step real-world {strand_focus} business examples.
     - 📺 YOUTUBE INTEGRATION: At the very end of the lecture_content, determine the best possible YouTube search query for this specific math topic, and output the raw URL EXACTLY like this:
-      
       [NEWLINE][NEWLINE]📺 Recommended Video Lessons:[NEWLINE]https://www.youtube.com/results?search_query=YOUR+URL+ENCODED+SEARCH+QUERY+HERE
     """
 
@@ -173,7 +169,7 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     base_prompt = """
     🛑 CRITICAL MATH FORMATTING RULES: 
     - NO RAW LATEX ALLOWED. Do NOT use $. 
-    - USE UNICODE MATH TYPOGRAPHY: Use unicode italic characters for variables (𝑥, 𝑦, 𝑛), superscripts for exponents (², ³), and standard operators (×, ÷, ≤, ≠, ±).
+    - USE UNICODE MATH TYPOGRAPHY.
     - Write fractions cleanly as plain text: a/b (e.g., 1/4).
     """
     
@@ -198,15 +194,48 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
     """
 
-def update_dynamic_form(comp_code, instruction_title, instruction_body, combined_quiz, form_service, form_id):
-    form = form_service.forms().get(formId=form_id).execute()
-    items = form.get('items', [])
-    requests = [{"updateFormInfo": {"info": {"title": f"{comp_code} Assessment"}, "updateMask": "title"}}]
+# --- V2 CORE: THE DYNAMIC FORM CLONER ---
+def deploy_cloned_form(comp_code, instruction_title, instruction_body, combined_quiz, drive_service, form_service, template_id):
+    # 1. Clone the Template
+    copied_file = drive_service.files().copy(
+        fileId=template_id, 
+        body={"name": f"{comp_code} Automated Assessment"}
+    ).execute()
+    new_form_id = copied_file['id']
     
-    for i in range(len(items) - 1, 3, -1):
+    # 2. Make the new Form Public
+    drive_service.permissions().create(
+        fileId=new_form_id,
+        body={'type': 'anyone', 'role': 'reader'}
+    ).execute()
+    
+    # 3. Clear existing template items
+    form = form_service.forms().get(formId=new_form_id).execute()
+    items = form.get('items', [])
+    requests = []
+    
+    for i in range(len(items) - 1, -1, -1):
         requests.append({"deleteItem": {"location": {"index": i}}})
         
-    current_index = 4
+    current_index = 0
+    
+    # 4. Inject the Harvester Gate (Student ID Collection)
+    requests.append({
+        "createItem": {
+            "item": {
+                "title": "Enter your Student ID (Required for Grading):",
+                "questionItem": {
+                    "question": {
+                        "required": True,
+                        "textQuestion": {"paragraph": False}
+                    }
+                }
+            },
+            "location": {"index": current_index}
+        }
+    })
+    current_index += 1
+    
     if instruction_body:
         requests.append({"createItem": {"item": {"title": instruction_title, "description": format_math_text(instruction_body), "textItem": {}}, "location": {"index": current_index}}})
         current_index += 1
@@ -239,8 +268,67 @@ def update_dynamic_form(comp_code, instruction_title, instruction_body, combined
         })
         current_index += 1
 
-    form_service.forms().batchUpdate(formId=form_id, body={"requests": requests}).execute()
-    return f"https://docs.google.com/forms/d/{form_id}/viewform"
+    # Publish all changes to the newly cloned form
+    form_service.forms().batchUpdate(formId=new_form_id, body={"requests": requests}).execute()
+    return f"https://docs.google.com/forms/d/{new_form_id}/viewform"
+
+# --- V2 CORE: THE API HARVESTER ---
+def harvest_responses(form_service, form_url):
+    if not form_url or "forms/d/" not in form_url: return {}
+    
+    form_id = form_url.split("forms/d/")[1].split("/")[0]
+    harvested_answers = {}
+    
+    try:
+        # Pull Form Layout to map internal Question IDs
+        form = form_service.forms().get(formId=form_id).execute()
+        items = form.get('items', [])
+        
+        student_id_qId = None
+        q_id_to_index = {}
+        mcq_index = 0
+        
+        for item in items:
+            if 'questionItem' in item:
+                qId = item['questionItem']['question']['questionId']
+                title = item.get('title', '').lower()
+                if "student id" in title:
+                    student_id_qId = qId
+                else:
+                    q_id_to_index[qId] = mcq_index
+                    mcq_index += 1
+                    
+        # Pull Student Submissions
+        resp_data = form_service.forms().responses().list(formId=form_id).execute()
+        responses = resp_data.get('responses', [])
+        
+        for resp in responses:
+            answers = resp.get('answers', {})
+            if student_id_qId not in answers: continue
+            
+            # Extract Student ID
+            raw_id = answers[student_id_qId].get('textAnswers', {}).get('answers', [{'value': ''}])[0].get('value', '').strip()
+            if not raw_id: continue
+            
+            # Reconstruct the A, B, C, D string
+            choices = ["MISSING"] * len(q_id_to_index)
+            for qId, ans_obj in answers.items():
+                if qId == student_id_qId: continue
+                if qId in q_id_to_index:
+                    idx = q_id_to_index[qId]
+                    ans_val = ans_obj.get('textAnswers', {}).get('answers', [{'value': ''}])[0].get('value', '')
+                    match = re.search(r'^([A-D])\)', str(ans_val).upper())
+                    if match:
+                        choices[idx] = match.group(1)
+                    else:
+                        choices[idx] = str(ans_val)[0].upper() if ans_val else "MISSING"
+                        
+            harvested_answers[raw_id] = ", ".join(choices)
+            
+        return harvested_answers
+    except Exception as e:
+        print(f"Harvester Error on {form_id}: {e}")
+        return {}
 
 def grade_submission_natively(student_answers_str, comp_code, strand_focus, sheet_client):
     bank = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Item_Bank")
@@ -308,7 +396,7 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     return score, format_math_text("\n".join(feedback_blocks)), None
 
 def main():
-    print("Initializing Circular Grader System...")
+    print("Initializing Circular Grader System (V2)...")
     sheet_client, drive_service, form_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
@@ -322,6 +410,9 @@ def main():
     headers = all_values[0]
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
 
+    # Global cache to prevent Harvester from spamming the API on the same quiz URL
+    global_harvest_cache = {}
+
     for row_idx, row in enumerate(all_records, start=2):
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
         if not raw_comp_code: continue
@@ -330,6 +421,7 @@ def main():
         curr = curr_data.get(comp_code)
         if not curr: continue
 
+        # --- STEP 1: DYNAMIC FORM GENERATION ---
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
@@ -387,24 +479,39 @@ def main():
                 final_form_quiz = combined_quiz[:display_limit]
 
             try:
-                form_url = update_dynamic_form(comp_code, instruction_title, instruction_body, final_form_quiz, form_service, DYNAMIC_FORM_ID)
+                # The New V2 Cloner Deploy
+                form_url = deploy_cloned_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service, TEMPLATE_FORM_ID)
                 
-                # --- THE BATCH UPDATE FIX ---
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
                     gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
                 ]
                 sheet.update_cells(update_payload)
                 
-                print(f"Form Deployed for {comp_code}. Handing off to n8n for email distribution.")
+                print(f"Form Cloned and Deployed for {comp_code}. Handing off to n8n for email distribution.")
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
+        # --- STEP 2: HARVESTING AND GRADING ---
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
+            form_url = str(row.get("Form_URL", "")).strip()
             if not student_id: continue 
                 
             digital_answers = str(row.get("Digital_Answers", "")).strip()
+            
+            # --- THE HARVESTER INTERCEPT ---
+            if not digital_answers and form_url:
+                # Only ping the API once per unique form to avoid rate limits
+                if form_url not in global_harvest_cache:
+                    global_harvest_cache[form_url] = harvest_responses(form_service, form_url)
+                
+                if student_id in global_harvest_cache[form_url]:
+                    digital_answers = global_harvest_cache[form_url][student_id]
+                    # Back-up the answers to the spreadsheet for record keeping
+                    sheet.update_cell(row_idx, headers.index("Digital_Answers") + 1, digital_answers)
+
+            # Gate 2: If the harvester found nothing, we continue waiting.
             if not digital_answers: continue
 
             profile = fetch_student_from_roster(sheet_client, student_id)
@@ -438,14 +545,20 @@ def main():
                 final_feedback = format_math_text(vault.get('Remediation_Scaffolding', diag_feedback)) if vault else diag_feedback
 
             try:
-                sheet.update_cell(row_idx, headers.index("Score") + 1, score)
-                sheet.update_cell(row_idx, headers.index("Remediation") + 1, final_feedback)
+                update_payload = [
+                    gspread.Cell(row_idx, headers.index("Score") + 1, score),
+                    gspread.Cell(row_idx, headers.index("Remediation") + 1, final_feedback)
+                ]
                 
                 if status == "Needs Review" and current_tries < 2:
-                    sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, "Needs Review_Trigger")
-                    sheet.update_cell(row_idx, headers.index("Tries") + 1, current_tries + 1)
+                    update_payload.append(gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Needs Review_Trigger"))
+                    
+                    if "Tries" in headers:
+                        update_payload.append(gspread.Cell(row_idx, headers.index("Tries") + 1, current_tries + 1))
                 else:
-                    sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, status)
+                    update_payload.append(gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, status))
+                
+                sheet.update_cells(update_payload)
                     
                 print(f"Processed grading row successfully. Status set to: {status}")
             except Exception as e: print(f"Update Error: {e}")
