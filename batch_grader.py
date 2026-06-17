@@ -13,7 +13,7 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-TEMPLATE_FORM_ID = "1fBj7nmWYtblECSFvPMoCZncS1gS3Dhz5D9mEABNVskA" 
+# TEMPLATE_FORM_ID is removed. We generate natively now!
 
 ASSESSMENT_RULES = {
     "QUIZ": {"target_count": 20, "display_count": 10, "has_lecture": True},
@@ -61,6 +61,10 @@ def fetch_student_from_roster(sheet_client, student_id):
 def format_math_text(text):
     if not text: return ""
     text = str(text)
+    text = text.replace('<br>', '\n').replace('<li>', '\n• ').replace('</p>', '\n\n')
+    text = text.replace('<ul>', '').replace('</ul>', '').replace('<ol>', '').replace('</ol>', '')
+    text = re.sub(r'<[^>]+>', '', text)
+    text = text.replace('**', '').replace('*', '')
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
     replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": "", "[NEWLINE]": "\n"}
     for old, new in replacements.items():
@@ -151,7 +155,7 @@ def get_lecture_prompt(curr, strand_focus):
     
     🛑 FORMATTING RULES (CRITICAL): 
     - NO RAW LATEX ALLOWED. Do NOT use $.
-    - USE UNICODE MATH TYPOGRAPHY.
+    - USE UNICODE MATH TYPOGRAPHY: Make it look like a math textbook using unicode characters. Use mathematical italics for variables (e.g., 𝑥, 𝑦, 𝑛), proper superscripts for exponents (e.g., 𝑥², 𝑦³), and standard operators (×, ÷, ≤, ≥, ≠).
     - ABSOLUTELY NO HTML TAGS. Do NOT use <br>, <b>, <i>, <ul>, <li>, <sup>, or <sub>. 
     
     🛑 THE SPACING FIX:
@@ -194,32 +198,28 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
     """
 
-# --- V2 CORE: THE DYNAMIC FORM CLONER ---
-def deploy_cloned_form(comp_code, instruction_title, instruction_body, combined_quiz, drive_service, form_service, template_id):
-    # 1. Clone the Template
-    copied_file = drive_service.files().copy(
-        fileId=template_id, 
-        body={"name": f"{comp_code} Automated Assessment"}
-    ).execute()
-    new_form_id = copied_file['id']
+# --- THE FIX: NATIVE FORM GENERATION ---
+def deploy_fresh_form(comp_code, instruction_title, instruction_body, combined_quiz, drive_service, form_service):
+    # 1. Create a brand new form natively via Forms API (Guaranteed active state)
+    new_form = form_service.forms().create(body={
+        "info": {
+            "title": f"{comp_code} Automated Assessment",
+            "documentTitle": f"{comp_code} Automated Assessment"
+        }
+    }).execute()
     
-    # 2. Make the new Form Public
+    new_form_id = new_form['formId']
+    
+    # 2. Make it public via Drive API
     drive_service.permissions().create(
         fileId=new_form_id,
         body={'type': 'anyone', 'role': 'reader'}
     ).execute()
     
-    # 3. Clear existing template items
-    form = form_service.forms().get(formId=new_form_id).execute()
-    items = form.get('items', [])
     requests = []
-    
-    for i in range(len(items) - 1, -1, -1):
-        requests.append({"deleteItem": {"location": {"index": i}}})
-        
     current_index = 0
     
-    # 4. Inject the Harvester Gate (Student ID Collection)
+    # 3. Inject Harvester Gate
     requests.append({
         "createItem": {
             "item": {
@@ -254,8 +254,8 @@ def deploy_cloned_form(comp_code, instruction_title, instruction_body, combined_
             q_text = format_math_text(q.question)
             opts = [f"A) {format_math_text(q.option_a)}", f"B) {format_math_text(q.option_b)}", f"C) {format_math_text(q.option_c)}", f"D) {format_math_text(q.option_d)}"]
 
-        if not q_text.strip():
-            q_text = f"Question {i+1} [Error: Question text missing from database]"
+        if not q_text or len(q_text) < 2:
+            q_text = f"Question {i+1} [Error: Question text was blank in database]"
 
         requests.append({
             "createItem": {
@@ -268,11 +268,9 @@ def deploy_cloned_form(comp_code, instruction_title, instruction_body, combined_
         })
         current_index += 1
 
-    # Publish all changes to the newly cloned form
     form_service.forms().batchUpdate(formId=new_form_id, body={"requests": requests}).execute()
     return f"https://docs.google.com/forms/d/{new_form_id}/viewform"
 
-# --- V2 CORE: THE API HARVESTER ---
 def harvest_responses(form_service, form_url):
     if not form_url or "forms/d/" not in form_url: return {}
     
@@ -280,7 +278,6 @@ def harvest_responses(form_service, form_url):
     harvested_answers = {}
     
     try:
-        # Pull Form Layout to map internal Question IDs
         form = form_service.forms().get(formId=form_id).execute()
         items = form.get('items', [])
         
@@ -298,7 +295,6 @@ def harvest_responses(form_service, form_url):
                     q_id_to_index[qId] = mcq_index
                     mcq_index += 1
                     
-        # Pull Student Submissions
         resp_data = form_service.forms().responses().list(formId=form_id).execute()
         responses = resp_data.get('responses', [])
         
@@ -306,11 +302,9 @@ def harvest_responses(form_service, form_url):
             answers = resp.get('answers', {})
             if student_id_qId not in answers: continue
             
-            # Extract Student ID
             raw_id = answers[student_id_qId].get('textAnswers', {}).get('answers', [{'value': ''}])[0].get('value', '').strip()
             if not raw_id: continue
             
-            # Reconstruct the A, B, C, D string
             choices = ["MISSING"] * len(q_id_to_index)
             for qId, ans_obj in answers.items():
                 if qId == student_id_qId: continue
@@ -396,7 +390,7 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     return score, format_math_text("\n".join(feedback_blocks)), None
 
 def main():
-    print("Initializing Circular Grader System (V2)...")
+    print("Initializing Circular Grader System (V2.1)...")
     sheet_client, drive_service, form_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
@@ -410,7 +404,6 @@ def main():
     headers = all_values[0]
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
 
-    # Global cache to prevent Harvester from spamming the API on the same quiz URL
     global_harvest_cache = {}
 
     for row_idx, row in enumerate(all_records, start=2):
@@ -421,7 +414,6 @@ def main():
         curr = curr_data.get(comp_code)
         if not curr: continue
 
-        # --- STEP 1: DYNAMIC FORM GENERATION ---
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
@@ -479,8 +471,8 @@ def main():
                 final_form_quiz = combined_quiz[:display_limit]
 
             try:
-                # The New V2 Cloner Deploy
-                form_url = deploy_cloned_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service, TEMPLATE_FORM_ID)
+                # The New V2 Native Generation
+                form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
                 
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
@@ -488,11 +480,10 @@ def main():
                 ]
                 sheet.update_cells(update_payload)
                 
-                print(f"Form Cloned and Deployed for {comp_code}. Handing off to n8n for email distribution.")
+                print(f"Form Natively Generated and Deployed for {comp_code}. Handing off to n8n for email distribution.")
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
-        # --- STEP 2: HARVESTING AND GRADING ---
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
             form_url = str(row.get("Form_URL", "")).strip()
@@ -500,18 +491,14 @@ def main():
                 
             digital_answers = str(row.get("Digital_Answers", "")).strip()
             
-            # --- THE HARVESTER INTERCEPT ---
             if not digital_answers and form_url:
-                # Only ping the API once per unique form to avoid rate limits
                 if form_url not in global_harvest_cache:
                     global_harvest_cache[form_url] = harvest_responses(form_service, form_url)
                 
                 if student_id in global_harvest_cache[form_url]:
                     digital_answers = global_harvest_cache[form_url][student_id]
-                    # Back-up the answers to the spreadsheet for record keeping
                     sheet.update_cell(row_idx, headers.index("Digital_Answers") + 1, digital_answers)
 
-            # Gate 2: If the harvester found nothing, we continue waiting.
             if not digital_answers: continue
 
             profile = fetch_student_from_roster(sheet_client, student_id)
