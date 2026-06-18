@@ -211,6 +211,7 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     {tos_context}
     {base_prompt}
     🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
+    🛑 CRITICAL INSTRUCTION: For 'correct_answer', output ONLY the single uppercase letter (A, B, C, or D). Do not write the full answer text!
     """
 
 # --- THE SLIDE BUILDER ENGINE ---
@@ -311,18 +312,26 @@ def harvest_responses(form_service, form_url):
     except Exception as e: print(f"Harvester Error on {form_id}: {e}")
     return {}
 
-def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank_sheet, bank_data):
+def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank_sheet, bank_data, try_count, display_limit):
     headers = bank_data[0]
-    answer_keys = []
+    all_keys = []
+    
+    # Grab all item keys mapped to this topic
     for idx, row in enumerate(bank_data[1:], start=2):
         if str(row[headers.index("Topic_Focus")]).strip().upper() == comp_code.strip().upper() and str(row[headers.index("Strand_Focus")]).strip().upper() == strand_focus.strip().upper():
             item_dict = dict(zip(headers, row))
             item_dict['_row_idx'] = idx 
-            answer_keys.append(item_dict)
+            all_keys.append(item_dict)
             
-    if not answer_keys: return None, "", f"Error: Answer keys not found for {comp_code} ({strand_focus})."
+    if not all_keys: return None, "", f"Error: Answer keys not found for {comp_code} ({strand_focus})."
+    
+    # BUG FIX 3: Accurately slice the answer key to match the exact subset the student was tested on
+    if try_count == 1: answer_keys = all_keys[:display_limit]
+    elif try_count == 2: answer_keys = all_keys[display_limit:(display_limit*2)]
+    else: answer_keys = all_keys[:display_limit]
         
-    student_choices = re.findall(r'([A-D])\)', student_answers_str.upper()) or re.findall(r'\b([A-D])\b', student_answers_str.upper())
+    # BUG FIX 2: Split by comma and strip, preserving 'MISSING' string placeholders so array indexes don't shift!
+    student_choices = [s.strip().upper() for s in student_answers_str.split(',')]
     student_choices += ['MISSING'] * max(0, len(answer_keys) - len(student_choices))
 
     correct_count = 0
@@ -332,10 +341,22 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank
     for idx, item in enumerate(answer_keys):
         safe_item = {str(k).strip().lower().replace(" ", "_"): v for k, v in item.items()}
         ans = str(safe_item.get('correct_answer', '')).strip().upper()
+        
+        # BUG FIX 1: The "Full Text" trap auto-correction. If Gemini output the raw string value instead of the letter.
+        if ans not in ['A', 'B', 'C', 'D']:
+            if ans == str(safe_item.get('option_a', '')).strip().upper(): ans = 'A'
+            elif ans == str(safe_item.get('option_b', '')).strip().upper(): ans = 'B'
+            elif ans == str(safe_item.get('option_c', '')).strip().upper(): ans = 'C'
+            elif ans == str(safe_item.get('option_d', '')).strip().upper(): ans = 'D'
+            else:
+                match = re.search(r'\b([A-D])\b', ans)
+                if match: ans = match.group(1)
+
         row_idx = item['_row_idx']
         attempts, corrects = int(safe_item.get('total_attempts', 0) or 0), int(safe_item.get('total_correct', 0) or 0)
         attempts += 1
         
+        # Safely guard against out-of-index if student choices array is magically shorter
         if idx < len(student_choices) and student_choices[idx] == ans:
             correct_count += 1
             corrects += 1
@@ -408,13 +429,14 @@ def main():
         assessment_type = str(row.get("Assessment_Type", "QUIZ")).strip().upper()
         curr = curr_data.get(comp_code)
         if not curr: continue
+        rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
+        display_limit = rules.get("display_count", 10)
 
         # PHASE 1: GENERATION (Forms & Slides)
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             try_count = int(row.get("Tries", 1) or 1)
             cache_key = f"{comp_code}_Try_{try_count}"
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
-            rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
             
             vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
             
@@ -460,8 +482,6 @@ def main():
                     if quiz_data:
                         save_items_to_bank(bank_sheet, bank_data, comp_code, strand_focus, quiz_data.quiz)
                         combined_quiz.extend(quiz_data.quiz)
-
-                display_limit = rules.get("display_count", 10)
                 
                 if try_count == 1: final_form_quiz = combined_quiz[:display_limit]
                 elif try_count == 2: final_form_quiz = combined_quiz[display_limit:(display_limit*2)]
@@ -523,7 +543,9 @@ def main():
             try_count = int(row.get("Tries", 1) or 1)
 
             print(f"Grading Submission: Student {student_id} | Attempt #{try_count}")
-            score, diag_feedback, error = grade_submission_natively(digital_answers, comp_code, strand_focus, bank_sheet, bank_data)
+            
+            # --- BUG FIX: Now passing try_count AND display_limit into the grader to calculate accurate scores! ---
+            score, diag_feedback, error = grade_submission_natively(digital_answers, comp_code, strand_focus, bank_sheet, bank_data, try_count, display_limit)
             
             if error:
                 safe_sheet_action(sheet.update_cell, row_idx, headers.index("Remediation_Status") + 1, "Manual_Review")
