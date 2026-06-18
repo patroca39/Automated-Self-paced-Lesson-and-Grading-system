@@ -21,7 +21,7 @@ ASSESSMENT_RULES = {
     "MAJOR_EXAM": {"target_count": 40, "display_count": 40, "has_lecture": False, "hard_mode": True} 
 }
 
-# --- DIAGNOSTIC SCHEMAS ---
+# --- DIAGNOSTIC SCHEMAS (V3.1 UPGRADE: ADDED SLIDES) ---
 class MCQ(BaseModel):
     sub_concept: str          
     question: str
@@ -33,19 +33,36 @@ class MCQ(BaseModel):
     targeted_remediation: str 
     difficulty: str 
 
+class Slide(BaseModel):
+    title: str
+    bullet_points: list[str]
+
+class PresentationSet(BaseModel):
+    core_slides: list[Slide]
+    remedial_slides: list[Slide]
+    advanced_slides: list[Slide]
+
 class LessonContentSchema(BaseModel):
     lesson_title: str
     lecture_content: str
     remediation_scaffolding: str  
     enrichment_scenario: str      
+    visual_decks: PresentationSet # New field for slide generation
 
 class QuizSchema(BaseModel):
     quiz: list[MCQ]
 
+# --- GOOGLE SERVICES (V3.1 UPGRADE: ADDED SLIDES API) ---
 def get_google_services():
     token_dict = json.loads(os.environ.get('GOOGLE_TOKEN_JSON'))
     creds = Credentials.from_authorized_user_info(token_dict)
-    return gspread.authorize(creds), build('drive', 'v3', credentials=creds), build('forms', 'v1', credentials=creds)
+    # Returns 4 services now instead of 3
+    return (
+        gspread.authorize(creds), 
+        build('drive', 'v3', credentials=creds), 
+        build('forms', 'v1', credentials=creds),
+        build('slides', 'v1', credentials=creds)
+    )
 
 def fetch_student_from_roster(sheet_client, student_id):
     try:
@@ -147,41 +164,33 @@ def save_items_to_bank(sheet_client, comp_code, strand_focus, mcq_list):
         
     bank.append_rows(new_rows)
 
-def save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data):
-    vault = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Modules_Vault")
-    vault.append_row([comp_code, strand_focus, lesson_data.lesson_title, format_math_text(lesson_data.lecture_content), format_math_text(lesson_data.remediation_scaffolding), lesson_data.enrichment_scenario])
-
-# --- NEW: THE PERFORMANCE LOGGER ---
 def append_to_performance_log(sheet_client, student_id, comp_code, score):
     try:
-        # Connects to your "Timestamp" tab to drop the permanent record
         log_sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Timestamp")
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
         log_sheet.append_row([current_time, student_id, comp_code, score, f"{score}%"])
     except Exception as e:
         print(f"⚠️ Failed to write to Performance Log: {e}")
 
+# --- PROMPT ENGINES ---
 def get_lecture_prompt(curr, strand_focus):
     return f"""
     You are an expert master teacher for the {strand_focus} track.
-    Create a highly comprehensive, deeply detailed self-paced reading module for this standard:
+    Create a highly comprehensive reading module AND 3 tiered slide decks (Core, Remedial, Advanced) for:
     Content Domain: {curr.get('content', 'Business Math')}
     Performance Standard: {curr.get('performance_standard', '')}
     Learning Competency: {curr.get('learning_competency', '')}
     
     🛑 FORMATTING RULES (CRITICAL): 
     - NO RAW LATEX ALLOWED. Do NOT use $.
-    - USE UNICODE MATH TYPOGRAPHY: Make it look like a math textbook using unicode characters. Use mathematical italics for variables (e.g., 𝑥, 𝑦, 𝑛), proper superscripts for exponents (e.g., 𝑥², 𝑦³), and standard operators (×, ÷, ≤, ≥, ≠).
+    - USE UNICODE MATH TYPOGRAPHY.
     - ABSOLUTELY NO HTML TAGS. Do NOT use <br>, <b>, <i>, <ul>, <li>, <sup>, or <sub>. 
     
     🛑 THE SPACING FIX:
     Because JSON strips invisible return keys, you MUST use the exact placeholder [NEWLINE] wherever you want a line break or paragraph break. 
     
-    🛑 LENGTH & STYLE MANDATE:
-    - The 'lecture_content' MUST be comprehensive, acting as a standalone textbook chapter.
-    - Provide at least 3 detailed, step-by-step real-world {strand_focus} business examples.
-    - 📺 YOUTUBE INTEGRATION: At the very end of the lecture_content, determine the best possible YouTube search query for this specific math topic, and output the raw URL EXACTLY like this:
-      [NEWLINE][NEWLINE]📺 Recommended Video Lessons:[NEWLINE]https://www.youtube.com/results?search_query=YOUR+URL+ENCODED+SEARCH+QUERY+HERE
+    🛑 SLIDE RULES:
+    Provide 3-5 slides per tier. Keep bullet points concise and impactful.
     """
 
 def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode=False):
@@ -213,6 +222,41 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     {base_prompt}
     🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
     """
+
+# --- NEW: V3.1 NATIVE SLIDE BUILDER ---
+def create_google_slides(comp_code, tier_name, slide_data, drive_service, slides_service):
+    print(f"🎨 Building {tier_name} Slides for {comp_code}...")
+    presentation = slides_service.presentations().create(body={'title': f"{comp_code} {tier_name} Visual Lecture"}).execute()
+    pres_id = presentation.get('presentationId')
+    
+    requests = []
+    for i, slide in enumerate(slide_data):
+        slide_id = f"s_{i}_{uuid.uuid4().hex[:6]}"
+        title_id = f"t_{i}_{uuid.uuid4().hex[:6]}"
+        body_id = f"b_{i}_{uuid.uuid4().hex[:6]}"
+        
+        requests.append({
+            'createSlide': {
+                'objectId': slide_id,
+                'slideLayoutReference': {'predefinedLayout': 'TITLE_AND_BODY'},
+                'placeholderIdMappings': [
+                    {'layoutPlaceholder': {'type': 'TITLE', 'index': 0}, 'objectId': title_id},
+                    {'layoutPlaceholder': {'type': 'BODY', 'index': 0}, 'objectId': body_id}
+                ]
+            }
+        })
+        
+        bullet_text = "\n".join([f"• {format_math_text(p)}" for p in slide.bullet_points])
+        requests.append({'insertText': {'objectId': title_id, 'text': format_math_text(slide.title)}})
+        requests.append({'insertText': {'objectId': body_id, 'text': bullet_text}})
+
+    default_slide_id = presentation.get('slides')[0].get('objectId')
+    requests.append({'deleteObject': {'objectId': default_slide_id}})
+
+    slides_service.presentations().batchUpdate(presentationId=pres_id, body={'requests': requests}).execute()
+    drive_service.permissions().create(fileId=pres_id, body={'type': 'anyone', 'role': 'reader'}).execute()
+    
+    return f"https://docs.google.com/presentation/d/{pres_id}/view"
 
 def deploy_fresh_form(comp_code, instruction_title, instruction_body, combined_quiz, drive_service, form_service):
     new_form = form_service.forms().create(body={
@@ -402,8 +446,10 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     return score, format_math_text("\n".join(feedback_blocks)), None
 
 def main():
-    print("Initializing Circular Grader System (V2.4)...")
-    sheet_client, drive_service, form_service = get_google_services()
+    print("Initializing Circular Grader System (V3.1 - Visual Engine)...")
+    
+    # Notice we unpack 4 items here now
+    sheet_client, drive_service, form_service, slides_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
     tos_rules = None
@@ -427,6 +473,9 @@ def main():
         curr = curr_data.get(comp_code)
         if not curr: continue
 
+        # ========================================================
+        # PHASE 1: GENERATION (Forms & Slides)
+        # ========================================================
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             
             try:
@@ -435,88 +484,108 @@ def main():
                 try_count = 1
                 
             cache_key = f"{comp_code}_Try_{try_count}"
-            
-            if cache_key in deployment_cache:
-                form_url = deployment_cache[cache_key]
-                print(f"⚡ Sharing cached form URL for {comp_code} (Attempt #{try_count})...")
-                
-                update_payload = [
-                    gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
-                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
-                ]
-                sheet.update_cells(update_payload)
-                continue
-            
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
+
+            # --- THE VAULT CHECK & GENERATOR ---
+            vault_sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Modules_Vault")
+            vault_rec = next((r for r in vault_sheet.get_all_records() if str(r.get('Topic_Focus','')).strip().upper() == comp_code.upper()), None)
             
-            banked_questions = fetch_banked_questions(sheet_client, comp_code, strand_focus)
-            missing_count = max(0, rules["target_count"] - len(banked_questions))
-            
-            combined_quiz = banked_questions.copy()
-            instruction_title = "📖 Reading Module" if rules["has_lecture"] else "📝 Exam Instructions"
+            core_url, rem_url, adv_url = "", "", ""
             instruction_body = ""
 
-            if missing_count > 0:
-                if rules["has_lecture"]:
-                    print(f"Calling Gemini (1/2): Generating comprehensive lecture for {comp_code}...")
+            if rules["has_lecture"]:
+                if not vault_rec:
+                    print(f"🚀 Master Content Missing for {comp_code}. Calling Gemini to build Reading & Slides...")
                     lec_prompt = get_lecture_prompt(curr, strand_focus)
                     lesson_data = call_gemini_with_retry(lec_prompt, LessonContentSchema)
                     
-                    print(f"Calling Gemini (2/2): Generating {missing_count}-item quiz bank...")
+                    if lesson_data:
+                        # Build Slides Natively
+                        core_url = create_google_slides(comp_code, "Core", lesson_data.visual_decks.core_slides, drive_service, slides_service)
+                        rem_url = create_google_slides(comp_code, "Remedial", lesson_data.visual_decks.remedial_slides, drive_service, slides_service)
+                        adv_url = create_google_slides(comp_code, "Advanced", lesson_data.visual_decks.advanced_slides, drive_service, slides_service)
+                        
+                        # Save to Vault
+                        vault_sheet.append_row([
+                            comp_code, strand_focus, lesson_data.lesson_title, format_math_text(lesson_data.lecture_content), 
+                            format_math_text(lesson_data.remediation_scaffolding), lesson_data.enrichment_scenario,
+                            core_url, rem_url, adv_url
+                        ])
+                        instruction_body = format_math_text(lesson_data.lecture_content)
+                else:
+                    instruction_body = format_math_text(vault_rec.get('Lecture_Content', ''))
+                    core_url = vault_rec.get('Core_Slides', '')
+                    rem_url = vault_rec.get('Remedial_Slides', '')
+                    adv_url = vault_rec.get('Advanced_Slides', '')
+            else:
+                instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
+
+            # --- FORM GENERATION & CACHING ---
+            if cache_key in deployment_cache:
+                form_url = deployment_cache[cache_key]
+                print(f"⚡ Sharing cached form URL for {comp_code} (Attempt #{try_count})...")
+            else:
+                banked_questions = fetch_banked_questions(sheet_client, comp_code, strand_focus)
+                missing_count = max(0, rules["target_count"] - len(banked_questions))
+                
+                combined_quiz = banked_questions.copy()
+                instruction_title = "📖 Reading Module" if rules["has_lecture"] else "📝 Exam Instructions"
+
+                if missing_count > 0:
+                    print(f"Calling Gemini: Generating {missing_count}-item exam bank for {comp_code}...")
                     qz_prompt = get_quiz_prompt(curr, strand_focus, missing_count, tos_rules, rules.get("hard_mode", False))
                     quiz_data = call_gemini_with_retry(qz_prompt, QuizSchema)
                     
-                    if lesson_data and quiz_data:
-                        save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data)
+                    if quiz_data:
                         save_items_to_bank(sheet_client, comp_code, strand_focus, quiz_data.quiz)
                         combined_quiz.extend(quiz_data.quiz)
-                        instruction_body = lesson_data.lecture_content
+
+                display_limit = rules.get("display_count", 10)
+                
+                if try_count == 1:
+                    final_form_quiz = combined_quiz[:display_limit]
+                elif try_count == 2:
+                    final_form_quiz = combined_quiz[display_limit:(display_limit*2)]
                 else:
-                    print(f"Calling Gemini: Generating {missing_count}-item exam bank for {comp_code}...")
-                    qz_prompt = get_quiz_prompt(curr, strand_focus, missing_count, tos_rules, rules.get("hard_mode", False))
-                    exam_data = call_gemini_with_retry(qz_prompt, QuizSchema)
+                    final_form_quiz = combined_quiz[:display_limit]
+
+                if not final_form_quiz:
+                    print(f"❌ ERROR: Quiz data is empty for {comp_code}. Gemini likely failed to generate. Skipping deployment.")
+                    sheet.update_cell(row_idx, headers.index("Form_Generation_Status") + 1, "GEMINI_ERROR")
+                    continue
+
+                try:
+                    form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
                     
-                    if exam_data:
-                        save_items_to_bank(sheet_client, comp_code, strand_focus, exam_data.quiz)
-                        combined_quiz.extend(exam_data.quiz)
-                        instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
-            else:
-                if rules["has_lecture"]:
-                    vault = fetch_from_vault(sheet_client, comp_code, strand_focus)
-                    instruction_body = vault.get('Lecture_Content', '') if vault else ""
-                else:
-                    instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
+                    deployment_cache[cache_key] = form_url
+                    print(f"✅ Form Natively Generated and Deployed for {comp_code}.")
+                except Exception as e: print(f"Form Gen Error: {e}")
 
-            display_limit = rules.get("display_count", 10)
-            
-            if try_count == 1:
-                final_form_quiz = combined_quiz[:display_limit]
-            elif try_count == 2:
-                final_form_quiz = combined_quiz[display_limit:(display_limit*2)]
-            else:
-                final_form_quiz = combined_quiz[:display_limit]
-
-            if not final_form_quiz:
-                print(f"❌ ERROR: Quiz data is empty for {comp_code}. Gemini likely failed to generate. Skipping deployment.")
-                sheet.update_cell(row_idx, headers.index("Form_Generation_Status") + 1, "GEMINI_ERROR")
-                continue
-
+            # --- V3.1: PUSH FORM URL & SLIDE URLS TO SHEET ---
             try:
-                form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
-                
-                deployment_cache[cache_key] = form_url
-                
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
-                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
+                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED"),
+                    gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending")
                 ]
-                sheet.update_cells(update_payload)
                 
-                print(f"✅ Form Natively Generated and Deployed for {comp_code}. Handing off to n8n for email distribution.")
-            except Exception as e: print(f"Form Gen Error: {e}")
+                if "Core_Slides" in headers and core_url: 
+                    update_payload.append(gspread.Cell(row_idx, headers.index("Core_Slides") + 1, core_url))
+                if "Remedial_Slides" in headers and rem_url: 
+                    update_payload.append(gspread.Cell(row_idx, headers.index("Remedial_Slides") + 1, rem_url))
+                if "Advanced_Slides" in headers and adv_url: 
+                    update_payload.append(gspread.Cell(row_idx, headers.index("Advanced_Slides") + 1, adv_url))
+
+                sheet.update_cells(update_payload)
+                print(f"✅ Handing off {comp_code} to n8n for email distribution.")
+            except Exception as e: print(f"Payload Update Error: {e}")
+            
             continue
 
+        # ========================================================
+        # PHASE 2: HARVESTING & GRADING
+        # ========================================================
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
             form_url = str(row.get("Form_URL", "")).strip()
