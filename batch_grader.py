@@ -64,70 +64,38 @@ def get_google_services():
         build('slides', 'v1', credentials=creds)
     )
 
-# --- THE 429 QUOTA FIX: ALL FUNCTIONS NOW USE 'WORKBOOK' INSTEAD OF OPENING A NEW CLIENT ---
-def fetch_student_from_roster(workbook, student_id):
-    try:
-        roster = workbook.worksheet("Master_Roster")
-        for r in roster.get_all_records():
-            if str(r.get('Student_ID', '')).strip() == str(student_id).strip():
-                return r
-    except Exception as e:
-        print(f"Roster Lookup Error: {e}")
-    return None
-
-def format_math_text(text):
-    if not text: return ""
-    text = str(text)
-    text = text.replace('<br>', '\n').replace('<li>', '\n• ').replace('</p>', '\n\n')
-    text = text.replace('<ul>', '').replace('</ul>', '').replace('<ol>', '').replace('</ol>', '')
-    text = re.sub(r'<[^>]+>', '', text)
-    text = text.replace('**', '').replace('*', '')
-    text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
-    replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": "", "[NEWLINE]": "\n"}
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-    return text.strip()
-
-def call_gemini_with_retry(contents, schema_class, retries=4):
-    for attempt in range(retries):
+# --- THE 429 QUOTA FIX: SAFE RETRY WRAPPER ---
+def safe_sheet_action(action_func, *args, **kwargs):
+    """Wraps Google Sheets API calls in a retry block to prevent 429 crashes."""
+    for attempt in range(4):
         try:
-            res = gen_client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=contents,
-                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema_class)
-            )
-            raw_json = res.text.strip()
-            if raw_json.startswith('```json'):
-                raw_json = raw_json[7:-3].strip()
-            elif raw_json.startswith('```'):
-                raw_json = raw_json[3:-3].strip()
-                
-            return schema_class.model_validate_json(raw_json)
+            return action_func(*args, **kwargs)
         except Exception as e:
-            print(f"⚠️ Gemini API Error (Attempt {attempt+1}/{retries}): {e}")
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
-                time.sleep(50) 
-            else:
-                time.sleep(35)
+            print(f"⚠️ Sheets API Rate Limit. Pausing 15s... (Attempt {attempt+1}/4)")
+            time.sleep(15)
+    print("❌ CRITICAL: Google Sheets API failed after 4 retries.")
     return None
 
-def fetch_from_vault(workbook, comp_code, strand_focus):
-    try:
-        vault = workbook.worksheet("Modules_Vault")
-        for r in vault.get_all_records():
-            if str(r.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(r.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper():
-                return r
-    except Exception: pass
+# --- MEMORY CACHE FUNCTIONS (ZERO API READS IN LOOP) ---
+def fetch_student_from_roster(roster_data, student_id):
+    for r in roster_data:
+        if str(r.get('Student_ID', '')).strip() == str(student_id).strip():
+            return r
     return None
 
-def fetch_banked_questions(workbook, comp_code, strand_focus):
-    bank = workbook.worksheet("Item_Bank")
-    all_items = bank.get_all_records()
-    return [item for item in all_items if str(item.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(item.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper()]
+def fetch_from_vault(vault_data, comp_code, strand_focus):
+    for r in vault_data:
+        if str(r.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(r.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper():
+            return r
+    return None
 
-def save_items_to_bank(workbook, comp_code, strand_focus, mcq_list):
-    bank = workbook.worksheet("Item_Bank")
-    headers = bank.row_values(1)
+def fetch_banked_questions(bank_data, comp_code, strand_focus):
+    headers = bank_data[0]
+    records = [dict(zip(headers, row)) for row in bank_data[1:]]
+    return [item for item in records if str(item.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and str(item.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper()]
+
+def save_items_to_bank(bank_sheet, bank_data, comp_code, strand_focus, mcq_list):
+    headers = bank_data[0]
     new_rows = []
     clean_headers = [str(h).strip().lower().replace(" ", "_") for h in headers]
     
@@ -142,31 +110,71 @@ def save_items_to_bank(workbook, comp_code, strand_focus, mcq_list):
             "sub_concept": q.sub_concept, "targeted_remediation": format_math_text(q.targeted_remediation),
             "total_attempts": 0, "total_correct": 0, "difficulty_index": 0.0, "item_status": "NEW"
         }
-        
-        ordered_row = []
-        if headers:
-            for ch in clean_headers: ordered_row.append(row_data.get(ch, ""))
-        else:
-            ordered_row = list(row_data.values())
+        ordered_row = [row_data.get(ch, "") for ch in clean_headers] if headers else list(row_data.values())
         new_rows.append(ordered_row)
-    bank.append_rows(new_rows)
+        
+    safe_sheet_action(bank_sheet.append_rows, new_rows)
+    bank_data.extend(new_rows) # Keep memory cache in sync!
 
-def save_master_lesson(workbook, comp_code, strand_focus, lesson_data, core_url, rem_url, adv_url):
-    vault = workbook.worksheet("Modules_Vault")
-    vault.append_row([
+def save_master_lesson(vault_sheet, vault_data, comp_code, strand_focus, lesson_data, core_url, rem_url, adv_url):
+    new_row = [
         comp_code, strand_focus, lesson_data.lesson_title, 
         format_math_text(lesson_data.lecture_content), format_math_text(lesson_data.remediation_scaffolding), 
         lesson_data.enrichment_scenario, core_url, rem_url, adv_url
-    ])
+    ]
+    safe_sheet_action(vault_sheet.append_row, new_row)
+    
+    # Sync memory cache
+    vault_data.append({
+        "Topic_Focus": comp_code, "Strand_Focus": strand_focus, "Lesson_Title": lesson_data.lesson_title,
+        "Lecture_Content": format_math_text(lesson_data.lecture_content), "Remediation_Scaffolding": format_math_text(lesson_data.remediation_scaffolding),
+        "Enrichment_Scenario": lesson_data.enrichment_scenario, "Core_Slides": core_url, "Remedial_Slides": rem_url, "Advanced_Slides": adv_url
+    })
 
-def append_to_performance_log(workbook, student_id, comp_code, score):
+def append_to_performance_log(log_sheet, student_id, comp_code, score):
     try:
-        # TAB NAME FIX: Changed from 'Timestamp' to 'Performance_Logs'
-        log_sheet = workbook.worksheet("Performance_Logs")
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        log_sheet.append_row([current_time, student_id, comp_code, score, f"{score}%"])
+        safe_sheet_action(log_sheet.append_row, [current_time, student_id, comp_code, score, f"{score}%"])
     except Exception as e:
         print(f"⚠️ Failed to write to Performance Log: {e}")
+
+def format_math_text(text):
+    if not text: return ""
+    text = str(text).replace('<br>', '\n').replace('<li>', '\n• ').replace('</p>', '\n\n')
+    text = text.replace('<ul>', '').replace('</ul>', '').replace('<ol>', '').replace('</ol>', '')
+    text = re.sub(r'<[^>]+>', '', text).replace('**', '').replace('*', '')
+    text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
+    replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": "", "[NEWLINE]": "\n"}
+    for old, new in replacements.items(): text = text.replace(old, new)
+    return text.strip()
+
+def call_gemini_with_retry(contents, schema_class, retries=4):
+    for attempt in range(retries):
+        try:
+            res = gen_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=contents,
+                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema_class)
+            )
+            raw_json = res.text.strip()
+            
+            # Safe JSON extraction without confusing the markdown parser
+            code_block_marker = "```"
+            json_block_marker = "```json"
+            
+            if raw_json.startswith(json_block_marker):
+                raw_json = raw_json[7:-3].strip()
+            elif raw_json.startswith(code_block_marker):
+                raw_json = raw_json[3:-3].strip()
+                
+            return schema_class.model_validate_json(raw_json)
+        except Exception as e:
+            print(f"⚠️ Gemini API Error (Attempt {attempt+1}/{retries}): {e}")
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
+                time.sleep(50) 
+            else:
+                time.sleep(35)
+    return None
 
 # --- PROMPT ENGINES ---
 def get_lecture_prompt(curr, strand_focus):
@@ -188,7 +196,7 @@ def get_lecture_prompt(curr, strand_focus):
 
 def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode=False):
     difficulty_context = "CRITICAL THINKING & ADVANCED ANALYSIS ONLY." if hard_mode else "Standard high school difficulty."
-    base_prompt = "🛑 CRITICAL MATH FORMATTING RULES: NO RAW LATEX ALLOWED. Do NOT use $. USE UNICODE MATH TYPOGRAPHY. Write fractions cleanly as plain text: a/b (e.g., 1/4)."
+    base_prompt = "🛑 CRITICAL MATH FORMATTING RULES: NO RAW LATEX ALLOWED. Do NOT use $. USE UNICODE MATH TYPOGRAPHY. Write fractions cleanly as plain text: a/b."
     
     tos_context = ""
     if tos_rules and "DepEd_TOS_Distribution" in tos_rules:
@@ -303,12 +311,10 @@ def harvest_responses(form_service, form_url):
     except Exception as e: print(f"Harvester Error on {form_id}: {e}")
     return {}
 
-def grade_submission_natively(student_answers_str, comp_code, strand_focus, workbook):
-    bank = workbook.worksheet("Item_Bank")
-    all_data = bank.get_all_values()
-    headers = all_data[0]
+def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank_sheet, bank_data):
+    headers = bank_data[0]
     answer_keys = []
-    for idx, row in enumerate(all_data[1:], start=2):
+    for idx, row in enumerate(bank_data[1:], start=2):
         if str(row[headers.index("Topic_Focus")]).strip().upper() == comp_code.strip().upper() and str(row[headers.index("Strand_Focus")]).strip().upper() == strand_focus.strip().upper():
             item_dict = dict(zip(headers, row))
             item_dict['_row_idx'] = idx 
@@ -342,15 +348,20 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, work
         status = "REVISE (Too Hard)" if p_index < 0.26 else ("REVISE (Too Easy)" if p_index > 0.75 else "RETAIN (Good)")
         
         if "Total_Attempts" in headers:
+            # Sync memory cache
+            bank_data[row_idx - 1][headers.index("Total_Attempts")] = attempts
+            bank_data[row_idx - 1][headers.index("Total_Correct")] = corrects
+            bank_data[row_idx - 1][headers.index("Difficulty_Index")] = p_index
+            bank_data[row_idx - 1][headers.index("Item_Status")] = status
+
             cell_updates.append(gspread.Cell(row_idx, headers.index("Total_Attempts") + 1, attempts))
             cell_updates.append(gspread.Cell(row_idx, headers.index("Total_Correct") + 1, corrects))
             cell_updates.append(gspread.Cell(row_idx, headers.index("Difficulty_Index") + 1, p_index))
             cell_updates.append(gspread.Cell(row_idx, headers.index("Item_Status") + 1, status))
 
     score = int((correct_count / len(answer_keys)) * 100)
-    if cell_updates: bank.update_cells(cell_updates)
+    if cell_updates: safe_sheet_action(bank_sheet.update_cells, cell_updates)
     
-    # THE MASSIVE TEXT FIX: If a student misses a lot, only show the top 5 areas to keep the sheet clean
     unique_feedback = list(dict.fromkeys(feedback_blocks))
     if len(unique_feedback) > 5:
         unique_feedback = unique_feedback[:5]
@@ -360,7 +371,7 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, work
 
 # --- MAIN LOOP ---
 def main():
-    print("Initializing Circular Grader System (V3.2 - Stable Engine)...")
+    print("Initializing Circular Grader System (V3.2 - Master Cache Edition)...")
     sheet_client, drive_service, form_service, slides_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
@@ -369,13 +380,23 @@ def main():
         with open("item_analysis_rules.json", "r") as f:
             tos_rules = json.load(f)
             
-    # THE 429 FIX: Open Workbook ONCE
+    print("📦 Caching Google Sheets into memory to prevent API rate limits...")
     workbook = sheet_client.open("Business_Math_Master_Gradebook")
-    sheet = workbook.worksheet("Skill_Analytics")
     
+    sheet = workbook.worksheet("Skill_Analytics")
+    bank_sheet = workbook.worksheet("Item_Bank")
+    vault_sheet = workbook.worksheet("Modules_Vault")
+    roster_sheet = workbook.worksheet("Master_Roster")
+    log_sheet = workbook.worksheet("Performance_Logs")
+
     all_values = sheet.get_all_values()
     headers = all_values[0]
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
+
+    bank_data = bank_sheet.get_all_values()
+    vault_data = vault_sheet.get_all_records()
+    roster_data = roster_sheet.get_all_records()
+    print("✅ Databases loaded successfully. Read requests drop to 0 during loop!")
 
     global_harvest_cache = {}
     deployment_cache = {} 
@@ -388,18 +409,14 @@ def main():
         curr = curr_data.get(comp_code)
         if not curr: continue
 
-        # ========================================================
         # PHASE 1: GENERATION (Forms & Slides)
-        # ========================================================
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
             try_count = int(row.get("Tries", 1) or 1)
             cache_key = f"{comp_code}_Try_{try_count}"
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
             
-            # --- THE VAULT CHECK ---
-            vault_sheet = workbook.worksheet("Modules_Vault")
-            vault_rec = next((r for r in vault_sheet.get_all_records() if str(r.get('Topic_Focus','')).strip().upper() == comp_code.upper()), None)
+            vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
             
             core_url, rem_url, adv_url = "", "", ""
             instruction_body = ""
@@ -415,7 +432,7 @@ def main():
                         rem_url = create_google_slides(comp_code, "Remedial", lesson_data.visual_decks.remedial_slides, drive_service, slides_service)
                         adv_url = create_google_slides(comp_code, "Advanced", lesson_data.visual_decks.advanced_slides, drive_service, slides_service)
                         
-                        save_master_lesson(workbook, comp_code, strand_focus, lesson_data, core_url, rem_url, adv_url)
+                        save_master_lesson(vault_sheet, vault_data, comp_code, strand_focus, lesson_data, core_url, rem_url, adv_url)
                         instruction_body = format_math_text(lesson_data.lecture_content)
                 else:
                     instruction_body = format_math_text(vault_rec.get('Lecture_Content', ''))
@@ -425,12 +442,11 @@ def main():
             else:
                 instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
 
-            # --- FORM CACHING & DEPLOYMENT ---
             if cache_key in deployment_cache:
                 form_url = deployment_cache[cache_key]
                 print(f"⚡ Sharing cached form URL for {comp_code} (Attempt #{try_count})...")
             else:
-                banked_questions = fetch_banked_questions(workbook, comp_code, strand_focus)
+                banked_questions = fetch_banked_questions(bank_data, comp_code, strand_focus)
                 missing_count = max(0, rules["target_count"] - len(banked_questions))
                 
                 combined_quiz = banked_questions.copy()
@@ -442,7 +458,7 @@ def main():
                     quiz_data = call_gemini_with_retry(qz_prompt, QuizSchema)
                     
                     if quiz_data:
-                        save_items_to_bank(workbook, comp_code, strand_focus, quiz_data.quiz)
+                        save_items_to_bank(bank_sheet, bank_data, comp_code, strand_focus, quiz_data.quiz)
                         combined_quiz.extend(quiz_data.quiz)
 
                 display_limit = rules.get("display_count", 10)
@@ -462,7 +478,6 @@ def main():
                     print(f"✅ Form Natively Generated and Deployed for {comp_code}.")
                 except Exception as e: print(f"Form Gen Error: {e}")
 
-            # --- V3.1 URL ROUTING ---
             try:
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
@@ -474,17 +489,14 @@ def main():
                 if "Remedial_Slides" in headers and rem_url: update_payload.append(gspread.Cell(row_idx, headers.index("Remedial_Slides") + 1, rem_url))
                 if "Advanced_Slides" in headers and adv_url: update_payload.append(gspread.Cell(row_idx, headers.index("Advanced_Slides") + 1, adv_url))
 
-                sheet.update_cells(update_payload)
+                safe_sheet_action(sheet.update_cells, update_payload)
                 print(f"✅ Handing off {comp_code} to n8n for email distribution.")
             except Exception as e: print(f"Payload Update Error: {e}")
             
-            # THE 429 FIX: Safely throttle loop
             time.sleep(2)
             continue
 
-        # ========================================================
         # PHASE 2: HARVESTING & GRADING
-        # ========================================================
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
             form_url = str(row.get("Form_URL", "")).strip()
@@ -498,35 +510,35 @@ def main():
                 
                 if student_id in global_harvest_cache[form_url]:
                     digital_answers = global_harvest_cache[form_url][student_id]
-                    sheet.update_cell(row_idx, headers.index("Digital_Answers") + 1, digital_answers)
+                    safe_sheet_action(sheet.update_cell, row_idx, headers.index("Digital_Answers") + 1, digital_answers)
 
             if not digital_answers: continue
 
-            profile = fetch_student_from_roster(workbook, student_id)
+            profile = fetch_student_from_roster(roster_data, student_id)
             if not profile:
-                sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, "Roster_Error")
+                safe_sheet_action(sheet.update_cell, row_idx, headers.index("Remediation_Status") + 1, "Roster_Error")
                 continue
             
             strand_focus = str(profile.get("Strand_Focus", "ABM")).strip().upper()
             try_count = int(row.get("Tries", 1) or 1)
 
             print(f"Grading Submission: Student {student_id} | Attempt #{try_count}")
-            score, diag_feedback, error = grade_submission_natively(digital_answers, comp_code, strand_focus, workbook)
+            score, diag_feedback, error = grade_submission_natively(digital_answers, comp_code, strand_focus, bank_sheet, bank_data)
             
             if error:
-                sheet.update_cell(row_idx, headers.index("Remediation_Status") + 1, "Manual_Review")
+                safe_sheet_action(sheet.update_cell, row_idx, headers.index("Remediation_Status") + 1, "Manual_Review")
                 continue
                 
             mastery_threshold = curr.get("mastery_threshold", 75)
             
             if score >= mastery_threshold:
                 status = "Excelling" if score >= 90 else "Passing"
-                vault = fetch_from_vault(workbook, comp_code, strand_focus)
-                final_feedback = vault.get('Enrichment_Text', "Passed successfully!") if vault else "Passed successfully!"
+                vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
+                final_feedback = vault_rec.get('Enrichment_Text', "Passed successfully!") if vault_rec else "Passed successfully!"
             else:
                 status = "Needs Review"
-                vault = fetch_from_vault(workbook, comp_code, strand_focus)
-                final_feedback = format_math_text(vault.get('Remediation_Scaffolding', diag_feedback)) if vault else diag_feedback
+                vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
+                final_feedback = format_math_text(vault_rec.get('Remediation_Scaffolding', diag_feedback)) if vault_rec else diag_feedback
 
             try:
                 update_payload = [
@@ -540,15 +552,13 @@ def main():
                 else:
                     update_payload.append(gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, status))
                 
-                sheet.update_cells(update_payload)
+                safe_sheet_action(sheet.update_cells, update_payload)
                 print(f"Processed grading row successfully. Status set to: {status}")
                 
-                # STAMP PERFORMANCE LOG
-                append_to_performance_log(workbook, student_id, comp_code, score)
+                append_to_performance_log(log_sheet, student_id, comp_code, score)
                 
             except Exception as e: print(f"Update Error: {e}")
             
-            # THE 429 FIX: Safely throttle loop
             time.sleep(2)
 
 if __name__ == '__main__':
