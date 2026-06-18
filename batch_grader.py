@@ -13,7 +13,6 @@ from google.genai import types
 
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-# TEMPLATE_FORM_ID is removed. We generate natively now!
 
 ASSESSMENT_RULES = {
     "QUIZ": {"target_count": 20, "display_count": 10, "has_lecture": True},
@@ -79,8 +78,15 @@ def call_gemini_with_retry(contents, schema_class, retries=4):
                 contents=contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema_class)
             )
-            return schema_class.model_validate_json(res.text)
+            raw_json = res.text.strip()
+            if raw_json.startswith('```json'):
+                raw_json = raw_json[7:-3].strip()
+            elif raw_json.startswith('```'):
+                raw_json = raw_json[3:-3].strip()
+                
+            return schema_class.model_validate_json(raw_json)
         except Exception as e:
+            print(f"⚠️ Gemini API Error (Attempt {attempt+1}/{retries}): {e}")
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e).upper():
                 time.sleep(50) 
             else:
@@ -198,9 +204,7 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
     """
 
-# --- THE FIX: NATIVE FORM GENERATION ---
 def deploy_fresh_form(comp_code, instruction_title, instruction_body, combined_quiz, drive_service, form_service):
-    # 1. Create a brand new form natively via Forms API (Guaranteed active state)
     new_form = form_service.forms().create(body={
         "info": {
             "title": f"{comp_code} Automated Assessment",
@@ -210,7 +214,6 @@ def deploy_fresh_form(comp_code, instruction_title, instruction_body, combined_q
     
     new_form_id = new_form['formId']
     
-    # 2. Make it public via Drive API
     drive_service.permissions().create(
         fileId=new_form_id,
         body={'type': 'anyone', 'role': 'reader'}
@@ -219,7 +222,6 @@ def deploy_fresh_form(comp_code, instruction_title, instruction_body, combined_q
     requests = []
     current_index = 0
     
-    # 3. Inject Harvester Gate
     requests.append({
         "createItem": {
             "item": {
@@ -390,7 +392,7 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     return score, format_math_text("\n".join(feedback_blocks)), None
 
 def main():
-    print("Initializing Circular Grader System (V2.1)...")
+    print("Initializing Circular Grader System (V2.3)...")
     sheet_client, drive_service, form_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
@@ -405,6 +407,10 @@ def main():
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
 
     global_harvest_cache = {}
+    
+    # --- NEW: THE DEPLOYMENT CACHE ---
+    # Tracks forms we generate DURING this execution so we don't spam the API
+    deployment_cache = {} 
 
     for row_idx, row in enumerate(all_records, start=2):
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
@@ -415,6 +421,27 @@ def main():
         if not curr: continue
 
         if str(row.get("Form_Generation_Status", "")).strip() == "READY":
+            
+            try:
+                try_count = int(row.get("Tries", 1))
+            except ValueError:
+                try_count = 1
+                
+            # Create a unique key for this specific topic and attempt
+            cache_key = f"{comp_code}_Try_{try_count}"
+            
+            # --- THE CACHE INTERCEPT ---
+            if cache_key in deployment_cache:
+                form_url = deployment_cache[cache_key]
+                print(f"⚡ Sharing cached form URL for {comp_code} (Attempt #{try_count})...")
+                
+                update_payload = [
+                    gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
+                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "DEPLOYED")
+                ]
+                sheet.update_cells(update_payload)
+                continue
+            
             strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
             
@@ -456,11 +483,6 @@ def main():
                 else:
                     instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
 
-            try:
-                try_count = int(row.get("Tries", 1))
-            except ValueError:
-                try_count = 1
-                
             display_limit = rules.get("display_count", 10)
             
             if try_count == 1:
@@ -470,9 +492,16 @@ def main():
             else:
                 final_form_quiz = combined_quiz[:display_limit]
 
+            if not final_form_quiz:
+                print(f"❌ ERROR: Quiz data is empty for {comp_code}. Gemini likely failed to generate. Skipping deployment.")
+                sheet.update_cell(row_idx, headers.index("Form_Generation_Status") + 1, "GEMINI_ERROR")
+                continue
+
             try:
-                # The New V2 Native Generation
                 form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
+                
+                # --- SAVE TO DEPLOYMENT CACHE ---
+                deployment_cache[cache_key] = form_url
                 
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, form_url),
@@ -480,7 +509,7 @@ def main():
                 ]
                 sheet.update_cells(update_payload)
                 
-                print(f"Form Natively Generated and Deployed for {comp_code}. Handing off to n8n for email distribution.")
+                print(f"✅ Form Natively Generated and Deployed for {comp_code}. Handing off to n8n for email distribution.")
             except Exception as e: print(f"Form Gen Error: {e}")
             continue
 
