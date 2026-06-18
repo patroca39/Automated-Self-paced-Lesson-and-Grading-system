@@ -151,6 +151,16 @@ def save_master_lesson(sheet_client, comp_code, strand_focus, lesson_data):
     vault = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Modules_Vault")
     vault.append_row([comp_code, strand_focus, lesson_data.lesson_title, format_math_text(lesson_data.lecture_content), format_math_text(lesson_data.remediation_scaffolding), lesson_data.enrichment_scenario])
 
+# --- NEW: THE PERFORMANCE LOGGER ---
+def append_to_performance_log(sheet_client, student_id, comp_code, score):
+    try:
+        # Connects to your "Timestamp" tab to drop the permanent record
+        log_sheet = sheet_client.open("Business_Math_Master_Gradebook").worksheet("Timestamp")
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+        log_sheet.append_row([current_time, student_id, comp_code, score, f"{score}%"])
+    except Exception as e:
+        print(f"⚠️ Failed to write to Performance Log: {e}")
+
 def get_lecture_prompt(curr, strand_focus):
     return f"""
     You are an expert master teacher for the {strand_focus} track.
@@ -392,7 +402,7 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, shee
     return score, format_math_text("\n".join(feedback_blocks)), None
 
 def main():
-    print("Initializing Circular Grader System (V2.3)...")
+    print("Initializing Circular Grader System (V2.4)...")
     sheet_client, drive_service, form_service = get_google_services()
     with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
@@ -407,9 +417,6 @@ def main():
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
 
     global_harvest_cache = {}
-    
-    # --- NEW: THE DEPLOYMENT CACHE ---
-    # Tracks forms we generate DURING this execution so we don't spam the API
     deployment_cache = {} 
 
     for row_idx, row in enumerate(all_records, start=2):
@@ -427,10 +434,8 @@ def main():
             except ValueError:
                 try_count = 1
                 
-            # Create a unique key for this specific topic and attempt
             cache_key = f"{comp_code}_Try_{try_count}"
             
-            # --- THE CACHE INTERCEPT ---
             if cache_key in deployment_cache:
                 form_url = deployment_cache[cache_key]
                 print(f"⚡ Sharing cached form URL for {comp_code} (Attempt #{try_count})...")
@@ -500,7 +505,6 @@ def main():
             try:
                 form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
                 
-                # --- SAVE TO DEPLOYMENT CACHE ---
                 deployment_cache[cache_key] = form_url
                 
                 update_payload = [
@@ -577,6 +581,10 @@ def main():
                 sheet.update_cells(update_payload)
                     
                 print(f"Processed grading row successfully. Status set to: {status}")
+                
+                # --- NEW: WRITE TO PERFORMANCE LOG ---
+                append_to_performance_log(sheet_client, student_id, comp_code, score)
+                
             except Exception as e: print(f"Update Error: {e}")
 
 if __name__ == '__main__':
