@@ -562,6 +562,11 @@ def main():
                 vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
                 final_feedback = format_math_text(vault_rec.get('Remediation_Scaffolding', diag_feedback)) if vault_rec else diag_feedback
 
+            # --- NEW: Grab Slide URLs from Vault during grading to guarantee n8n has them ---
+            core_url = vault_rec.get('Core_Slides', '') if vault_rec else ""
+            rem_url = vault_rec.get('Remedial_Slides', '') if vault_rec else ""
+            adv_url = vault_rec.get('Advanced_Slides', '') if vault_rec else ""
+
             try:
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Score") + 1, score),
@@ -574,6 +579,11 @@ def main():
                 else:
                     update_payload.append(gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, status))
                 
+                # --- NEW: Push Slide URLs to the sheet right before email dispatch ---
+                if "Core_Slides" in headers and core_url: update_payload.append(gspread.Cell(row_idx, headers.index("Core_Slides") + 1, core_url))
+                if "Remedial_Slides" in headers and rem_url: update_payload.append(gspread.Cell(row_idx, headers.index("Remedial_Slides") + 1, rem_url))
+                if "Advanced_Slides" in headers and adv_url: update_payload.append(gspread.Cell(row_idx, headers.index("Advanced_Slides") + 1, adv_url))
+
                 safe_sheet_action(sheet.update_cells, update_payload)
                 print(f"Processed grading row successfully. Status set to: {status}")
                 
