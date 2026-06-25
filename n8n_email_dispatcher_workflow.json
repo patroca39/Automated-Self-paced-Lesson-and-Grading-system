@@ -1,0 +1,296 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1JBGpBHAlfypmw1645UXtp3stAejjANPzCDxkZqiewBI",
+          "mode": "list",
+          "cachedResultName": "Business_Math_Master_Gradebook",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JBGpBHAlfypmw1645UXtp3stAejjANPzCDxkZqiewBI/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 815860324,
+          "mode": "list",
+          "cachedResultName": "Skill_Analytics",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JBGpBHAlfypmw1645UXtp3stAejjANPzCDxkZqiewBI/edit#gid=815860324"
+        },
+        "event": "rowUpdate",
+        "options": {
+          "columnsToWatch": [
+            "Form_Generation_Status"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1008,
+        -400
+      ],
+      "id": "b9a3666b-c1cc-45a4-8466-f12dc98929df",
+      "name": "Google Sheets Trigger",
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "vO6KrKQ6JZOCRRSN",
+          "name": "Google Sheets Trigger account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email_Address }}",
+        "subject": "=New Business Math Module Ready: {{ $json.Topic_Focus }}",
+        "message": "=Here is your core lesson for today: {{ $json.Core_Slides }}. After reading, take your quiz here: {{ $json.Form_URL }}.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        -672
+      ],
+      "id": "37648d66-e0cd-4493-a3f5-a27205a6aee4",
+      "name": "Send a message",
+      "webhookId": "b15765c0-f39c-4612-8943-58632be46977",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "cLWzfvXHp1jrdw36",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Google Sheets Trigger').item.json.Email_Address }}",
+        "subject": "Module Complete: {{ $json.Topic_Focus }} Results",
+        "message": "Hello {{ $json.Student_Name }},\n\nGreat job! You have successfully passed the module for {{ $json.Topic_Focus }}.\n\nYour Score: {{ $json.Score }}%\nTeacher / AI Feedback: {{ $json.Remediation }}\n\nYou have completed this topic and do not need to take any further action. Keep up the good work!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        -48
+      ],
+      "id": "063aaa18-1745-440d-a903-de17302ddd50",
+      "name": "Send a message1",
+      "webhookId": "ae43396c-f29f-447a-877a-38d241ab3233",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "cLWzfvXHp1jrdw36",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.Remediation_Status }}",
+                    "rightValue": "Pending",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e591c2c7-d638-4621-9ddc-0509414e8f3c"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "69b6915e-06b7-4f83-97ad-7e38902ca9de",
+                    "leftValue": "={{ $json.Remediation_Status }}",
+                    "rightValue": "Needs Review_Trigger",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "ce2b3ef2-96f5-4ee8-a00c-c302c01945fd",
+                    "leftValue": "={{ $json.Remediation_Status }}",
+                    "rightValue": "Excelling",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "88bfa197-8814-47cd-b703-ecbeaedaf24e",
+                    "leftValue": "={{ $json.Remediation_Status }}",
+                    "rightValue": "Passing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -768,
+        -432
+      ],
+      "id": "081069ec-6134-406c-b927-29c54c36d134",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email_Address }}",
+        "subject": "=New Business Math Module Ready: {{ $json.Topic_Focus }}",
+        "message": "=You didn't quite pass. Please review these targeted slides: {{ $('Google Sheets Trigger').item.json.Remedial_Slides }}, and then try the quiz again here:{{ $('Google Sheets Trigger').item.json.Form_URL }} .",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        -464
+      ],
+      "id": "b2760508-0a09-4efd-a688-f36409569156",
+      "name": "Send a message2",
+      "webhookId": "b15765c0-f39c-4612-8943-58632be46977",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "cLWzfvXHp1jrdw36",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email_Address }}",
+        "subject": "=New Business Math Module Ready: {{ $json.Topic_Focus }}",
+        "message": "=Amazing job! You scored high. Here is some advanced material to check out: {{ $('Google Sheets Trigger').item.json.Advanced_Slides }}. No further quiz needed!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        -256
+      ],
+      "id": "ab851065-3528-40ef-bcad-0ce1a6ec3ebe",
+      "name": "Send a message3",
+      "webhookId": "b15765c0-f39c-4612-8943-58632be46977",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "cLWzfvXHp1jrdw36",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1f06ee4187ea7722ca65c6cc978d0f7a103fb7577861ef2d158a4af30c4818da"
+  }
+}
