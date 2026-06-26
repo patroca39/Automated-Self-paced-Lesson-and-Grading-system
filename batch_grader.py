@@ -89,6 +89,22 @@ def fetch_from_vault(vault_data, comp_code, strand_focus):
             return r
     return None
 
+def fetch_from_deployments(deploy_data, comp_code, strand_focus, try_count):
+    for r in deploy_data:
+        if str(r.get('Topic_Focus', '')).strip().upper() == comp_code.strip().upper() and \
+           str(r.get('Strand_Focus', '')).strip().upper() == strand_focus.strip().upper() and \
+           str(r.get('Tries', '1')) == str(try_count):
+            return r
+    return None
+
+def save_to_deployments(deploy_sheet, deploy_data, comp_code, strand_focus, try_count, form_url, core_url, rem_url, adv_url):
+    new_row = [comp_code, strand_focus, try_count, form_url, core_url, rem_url, adv_url]
+    safe_sheet_action(deploy_sheet.append_row, new_row)
+    deploy_data.append({
+        "Topic_Focus": comp_code, "Strand_Focus": strand_focus, "Tries": try_count,
+        "Form_URL": form_url, "Core_Slides": core_url, "Remedial_Slides": rem_url, "Advanced_Slides": adv_url
+    })
+
 def fetch_banked_questions(bank_data, comp_code, strand_focus):
     headers = bank_data[0]
     records = [dict(zip(headers, row)) for row in bank_data[1:]]
@@ -247,7 +263,8 @@ def create_google_slides(comp_code, tier_name, slide_data, drive_service, slides
     slides_service.presentations().batchUpdate(presentationId=pres_id, body={'requests': requests}).execute()
     drive_service.permissions().create(fileId=pres_id, body={'type': 'anyone', 'role': 'reader'}).execute()
     
-    return f"https://docs.google.com/presentation/d/{pres_id}/view"
+    # MODIFIED: Instead of returning the '/view' URL, this returns the direct PPTX export URL.
+    return f"https://docs.google.com/presentation/d/{pres_id}/export/pptx"
 
 # --- THE FORM BUILDER ---
 def deploy_fresh_form(comp_code, instruction_title, instruction_body, combined_quiz, drive_service, form_service):
@@ -409,6 +426,7 @@ def main():
     vault_sheet = workbook.worksheet("Modules_Vault")
     roster_sheet = workbook.worksheet("Master_Roster")
     log_sheet = workbook.worksheet("Performance_Logs")
+    deploy_sheet = workbook.worksheet("Deployments_Library") # NEW TAB
 
     all_values = sheet.get_all_values()
     headers = all_values[0]
@@ -417,6 +435,7 @@ def main():
     bank_data = bank_sheet.get_all_values()
     vault_data = vault_sheet.get_all_records()
     roster_data = roster_sheet.get_all_records()
+    deploy_data = deploy_sheet.get_all_records() # NEW TAB CACHE
     print("✅ Databases loaded successfully. Read requests drop to 0 during loop!")
 
     global_harvest_cache = {}
@@ -432,13 +451,52 @@ def main():
         rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
         display_limit = rules.get("display_count", 10)
 
+        # --- NEW PHASE 0: AUTO-ADVANCEMENT STATE MACHINE ---
+        # Safely resets a student's row for the next topic/retry AFTER n8n has sent the grade email
+        form_gen_status = str(row.get("Form_Generation_Status", "")).strip().upper()
+        strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
+        
+        if form_gen_status == "ADVANCE_NEXT_TOPIC":
+            curriculum_keys = list(curr_data.keys())
+            current_idx = curriculum_keys.index(comp_code) if comp_code in curriculum_keys else -1
+            
+            if current_idx != -1 and current_idx + 1 < len(curriculum_keys):
+                next_comp = curriculum_keys[current_idx + 1]
+                print(f"⏩ Advancing Student {row.get('Student_ID')} to next topic: {next_comp}")
+                
+                safe_sheet_action(sheet.update_cells, [
+                    gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"ABM_BM11{next_comp}"),
+                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
+                    gspread.Cell(row_idx, headers.index("Tries") + 1, 1),
+                    gspread.Cell(row_idx, headers.index("Digital_Answers") + 1, ""),
+                    gspread.Cell(row_idx, headers.index("Score") + 1, ""),
+                    gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
+                    gspread.Cell(row_idx, headers.index("Remediation") + 1, ""),
+                    gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
+                ])
+            else:
+                safe_sheet_action(sheet.update_cell, row_idx, headers.index("Form_Generation_Status") + 1, "COURSE_COMPLETE")
+            continue
+            
+        elif form_gen_status == "ADVANCE_RETRY":
+            print(f"🔄 Prepping Student {row.get('Student_ID')} for Attempt #2 on {comp_code}")
+            safe_sheet_action(sheet.update_cells, [
+                gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
+                gspread.Cell(row_idx, headers.index("Tries") + 1, 2),
+                gspread.Cell(row_idx, headers.index("Digital_Answers") + 1, ""),
+                gspread.Cell(row_idx, headers.index("Score") + 1, ""),
+                gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
+                gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
+            ])
+            continue
+
         # PHASE 1: GENERATION (Forms & Slides)
-        if str(row.get("Form_Generation_Status", "")).strip() == "READY":
+        if form_gen_status == "READY":
             try_count = int(row.get("Tries", 1) or 1)
             cache_key = f"{comp_code}_Try_{try_count}"
-            strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
             
             vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
+            deploy_rec = fetch_from_deployments(deploy_data, comp_code, strand_focus, try_count)
             
             core_url, rem_url, adv_url = "", "", ""
             instruction_body = ""
@@ -464,9 +522,13 @@ def main():
             else:
                 instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
 
-            if cache_key in deployment_cache:
+            # --- NEW: Check the permanent Deployments_Library tab first ---
+            if deploy_rec:
+                form_url = deploy_rec.get('Form_URL', '')
+                print(f"⚡ Sharing globally cached form URL for {comp_code} (Attempt #{try_count}) from Deployments Library...")
+            elif cache_key in deployment_cache:
                 form_url = deployment_cache[cache_key]
-                print(f"⚡ Sharing cached form URL for {comp_code} (Attempt #{try_count})...")
+                print(f"⚡ Sharing session-cached form URL for {comp_code} (Attempt #{try_count})...")
             else:
                 banked_questions = fetch_banked_questions(bank_data, comp_code, strand_focus)
                 missing_count = max(0, rules["target_count"] - len(banked_questions))
@@ -495,7 +557,8 @@ def main():
                 try:
                     form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
                     deployment_cache[cache_key] = form_url
-                    print(f"✅ Form Natively Generated and Deployed for {comp_code}.")
+                    save_to_deployments(deploy_sheet, deploy_data, comp_code, strand_focus, try_count, form_url, core_url, rem_url, adv_url)
+                    print(f"✅ Form Natively Generated and Deployed for {comp_code}. Saved to Library.")
                 except Exception as e: print(f"Form Gen Error: {e}")
 
             try:
