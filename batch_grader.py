@@ -52,6 +52,12 @@ class LessonContentSchema(BaseModel):
 class QuizSchema(BaseModel):
     quiz: list[MCQ]
 
+# --- NEW: AI NAVIGATOR SCHEMA ---
+class NextTopicSchema(BaseModel):
+    selected_topic_code: str
+    reasoning: str
+    is_course_complete: bool
+
 # --- GOOGLE AUTHENTICATION ---
 def get_google_services():
     token_dict = json.loads(os.environ.get('GOOGLE_TOKEN_JSON'))
@@ -230,6 +236,30 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     🛑 CRITICAL INSTRUCTION: For 'correct_answer', output ONLY the single uppercase letter (A, B, C, or D). Do not write the full answer text!
     """
 
+# --- NEW: THE NAVIGATOR PROMPT ENGINE ---
+def get_navigator_prompt(student_id, recent_score, current_topic, curr_data):
+    # Pass the entire curriculum map to Gemini so it knows the rules
+    map_context = json.dumps(curr_data, indent=2)
+    return f"""
+    You are an automated Curriculum Navigator for a Senior High School Business Math class.
+    
+    STUDENT CONTEXT:
+    - Student ID: {student_id}
+    - Just completed topic: {current_topic}
+    - Score on that topic: {recent_score}%
+    
+    CURRICULUM MAP:
+    {map_context}
+    
+    YOUR MISSION:
+    Look at the curriculum map and the student's score. 
+    1. If the score is >= 75%, select the next logical topic based on the 'prerequisites' and 'difficulty_level'.
+    2. If the score is incredibly high (>= 95%), check if they can skip a basic topic and go straight to an advanced one.
+    3. If there are no more topics left to take, set 'is_course_complete' to true.
+    
+    Analyze the logic, state your reasoning, and output the EXACT code of the next topic (e.g., "FO-Ia-2").
+    """
+
 # --- THE SLIDE BUILDER ENGINE ---
 def create_google_slides(comp_code, tier_name, slide_data, drive_service, slides_service):
     print(f"🎨 Building {tier_name} Slides for {comp_code}...")
@@ -342,12 +372,12 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank
             
     if not all_keys: return None, "", f"Error: Answer keys not found for {comp_code} ({strand_focus})."
     
-    # BUG FIX 3: Accurately slice the answer key to match the exact subset the student was tested on
+    # Accurately slice the answer key to match the exact subset the student was tested on
     if try_count == 1: answer_keys = all_keys[:display_limit]
     elif try_count == 2: answer_keys = all_keys[display_limit:(display_limit*2)]
     else: answer_keys = all_keys[:display_limit]
         
-    # BUG FIX 2: Split by comma and strip, preserving 'MISSING' string placeholders so array indexes don't shift!
+    # Split by comma and strip, preserving 'MISSING' string placeholders so array indexes don't shift!
     student_choices = [s.strip().upper() for s in student_answers_str.split(',')]
     student_choices += ['MISSING'] * max(0, len(answer_keys) - len(student_choices))
 
@@ -359,7 +389,7 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank
         safe_item = {str(k).strip().lower().replace(" ", "_"): v for k, v in item.items()}
         ans = str(safe_item.get('correct_answer', '')).strip().upper()
         
-        # BUG FIX 1: The "Full Text" trap auto-correction. If Gemini output the raw string value instead of the letter.
+        # The "Full Text" trap auto-correction. If Gemini output the raw string value instead of the letter.
         if ans not in ['A', 'B', 'C', 'D']:
             if ans == str(safe_item.get('option_a', '')).strip().upper(): ans = 'A'
             elif ans == str(safe_item.get('option_b', '')).strip().upper(): ans = 'B'
@@ -409,9 +439,11 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank
 
 # --- MAIN LOOP ---
 def main():
-    print("Initializing Circular Grader System (V3.2 - Master Cache Edition)...")
+    print("Initializing Circular Grader System (V3.3 - AI Navigator Edition)...")
     sheet_client, drive_service, form_service, slides_service = get_google_services()
-    with open("curriculum_guide.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
+    
+    # Read from the newly updated curriculum map JSON!
+    with open("curriculum_map.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
     tos_rules = None
     if os.path.exists("item_analysis_rules.json"):
@@ -451,18 +483,22 @@ def main():
         rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
         display_limit = rules.get("display_count", 10)
 
-        # --- NEW PHASE 0: AUTO-ADVANCEMENT STATE MACHINE ---
+        # --- PHASE 0: AUTO-ADVANCEMENT STATE MACHINE (UPGRADED) ---
         # Safely resets a student's row for the next topic/retry AFTER n8n has sent the grade email
         form_gen_status = str(row.get("Form_Generation_Status", "")).strip().upper()
         strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
+        student_id = str(row.get("Student_ID", "")).strip()
         
         if form_gen_status == "ADVANCE_NEXT_TOPIC":
-            curriculum_keys = list(curr_data.keys())
-            current_idx = curriculum_keys.index(comp_code) if comp_code in curriculum_keys else -1
+            recent_score = row.get("Score", 0)
+            print(f"🧠 AI Navigator analyzing progression for Student {student_id} (Last Score: {recent_score}%)...")
             
-            if current_idx != -1 and current_idx + 1 < len(curriculum_keys):
-                next_comp = curriculum_keys[current_idx + 1]
-                print(f"⏩ Advancing Student {row.get('Student_ID')} to next topic: {next_comp}")
+            nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, curr_data)
+            nav_decision = call_gemini_with_retry(nav_prompt, NextTopicSchema)
+            
+            if nav_decision and not nav_decision.is_course_complete:
+                next_comp = nav_decision.selected_topic_code
+                print(f"⏩ AI Selected Next Topic: {next_comp} | Reasoning: {nav_decision.reasoning}")
                 
                 safe_sheet_action(sheet.update_cells, [
                     gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"ABM_BM11{next_comp}"),
@@ -475,6 +511,7 @@ def main():
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
                 ])
             else:
+                print(f"🎓 Course Complete for Student {student_id}!")
                 safe_sheet_action(sheet.update_cell, row_idx, headers.index("Form_Generation_Status") + 1, "COURSE_COMPLETE")
             continue
             
@@ -544,7 +581,7 @@ def main():
                     if quiz_data:
                         save_items_to_bank(bank_sheet, bank_data, comp_code, strand_focus, quiz_data.quiz)
                         combined_quiz.extend(quiz_data.quiz)
-                
+
                 if try_count == 1: final_form_quiz = combined_quiz[:display_limit]
                 elif try_count == 2: final_form_quiz = combined_quiz[display_limit:(display_limit*2)]
                 else: final_form_quiz = combined_quiz[:display_limit]
@@ -606,8 +643,6 @@ def main():
             try_count = int(row.get("Tries", 1) or 1)
 
             print(f"Grading Submission: Student {student_id} | Attempt #{try_count}")
-            
-            # --- BUG FIX: Now passing try_count AND display_limit into the grader to calculate accurate scores! ---
             score, diag_feedback, error = grade_submission_natively(digital_answers, comp_code, strand_focus, bank_sheet, bank_data, try_count, display_limit)
             
             if error:
@@ -633,7 +668,8 @@ def main():
             try:
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Score") + 1, score),
-                    gspread.Cell(row_idx, headers.index("Remediation") + 1, final_feedback)
+                    gspread.Cell(row_idx, headers.index("Remediation") + 1, final_feedback),
+                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "GRADED") # Wakes up n8n!
                 ]
                 
                 if status == "Needs Review" and try_count < 2:
@@ -642,7 +678,7 @@ def main():
                 else:
                     update_payload.append(gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, status))
                 
-                # --- NEW: Push Slide URLs to the sheet right before email dispatch ---
+                # Push Slide URLs to the sheet right before email dispatch
                 if "Core_Slides" in headers and core_url: update_payload.append(gspread.Cell(row_idx, headers.index("Core_Slides") + 1, core_url))
                 if "Remedial_Slides" in headers and rem_url: update_payload.append(gspread.Cell(row_idx, headers.index("Remedial_Slides") + 1, rem_url))
                 if "Advanced_Slides" in headers and adv_url: update_payload.append(gspread.Cell(row_idx, headers.index("Advanced_Slides") + 1, adv_url))
