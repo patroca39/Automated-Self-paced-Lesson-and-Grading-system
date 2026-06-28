@@ -3,6 +3,7 @@ import time
 import json
 import re
 import uuid
+import argparse
 import gspread
 import pandas as pd
 from google.oauth2.credentials import Credentials
@@ -153,10 +154,10 @@ def save_master_lesson(vault_sheet, vault_data, comp_code, strand_focus, lesson_
         "Enrichment_Scenario": lesson_data.enrichment_scenario, "Core_Slides": core_url, "Remedial_Slides": rem_url, "Advanced_Slides": adv_url
     })
 
-def append_to_performance_log(log_sheet, student_id, comp_code, score):
+def append_to_performance_log(log_sheet, student_id, comp_code, score, feedback):
     try:
         current_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        safe_sheet_action(log_sheet.append_row, [current_time, student_id, comp_code, score, f"{score}%"])
+        safe_sheet_action(log_sheet.append_row, [current_time, student_id, comp_code, score, f"{score}%", feedback])
     except Exception as e:
         print(f"⚠️ Failed to write to Performance Log: {e}")
 
@@ -439,7 +440,12 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank
 
 # --- MAIN LOOP ---
 def main():
-    print("Initializing Circular Grader System (V3.3 - AI Navigator Edition)...")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["all", "deploy", "grade"], default="all")
+    args = parser.parse_args()
+    run_mode = args.mode
+
+    print(f"Initializing Circular Grader System (V3.3 - AI Navigator Edition) [MODE: {run_mode.upper()}]...")
     sheet_client, drive_service, form_service, slides_service = get_google_services()
     
     # Read from the newly updated curriculum map JSON!
@@ -483,9 +489,18 @@ def main():
         rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
         display_limit = rules.get("display_count", 10)
 
+        # --- MODE ROUTER (GATEKEEPER) ---
+        form_gen_status = str(row.get("Form_Generation_Status", "")).strip().upper()
+        rem_status = str(row.get("Remediation_Status", "")).strip()
+
+        if run_mode == "deploy" and form_gen_status not in ["ADVANCE_NEXT_TOPIC", "ADVANCE_RETRY", "READY"]:
+            continue
+            
+        if run_mode == "grade" and rem_status != "Pending":
+            continue
+
         # --- PHASE 0: AUTO-ADVANCEMENT STATE MACHINE (UPGRADED) ---
         # Safely resets a student's row for the next topic/retry AFTER n8n has sent the grade email
-        form_gen_status = str(row.get("Form_Generation_Status", "")).strip().upper()
         strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
         student_id = str(row.get("Student_ID", "")).strip()
         
@@ -686,7 +701,7 @@ def main():
                 safe_sheet_action(sheet.update_cells, update_payload)
                 print(f"Processed grading row successfully. Status set to: {status}")
                 
-                append_to_performance_log(log_sheet, student_id, comp_code, score)
+                append_to_performance_log(log_sheet, student_id, comp_code, score, final_feedback)
                 
             except Exception as e: print(f"Update Error: {e}")
             
