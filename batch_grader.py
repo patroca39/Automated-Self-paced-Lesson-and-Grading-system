@@ -4,6 +4,7 @@ import json
 import re
 import uuid
 import argparse
+import datetime
 import gspread
 import pandas as pd
 from google.oauth2.credentials import Credentials
@@ -15,12 +16,28 @@ from google.genai import types
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
+# Matched exactly to DepEd SHS Memorandum No. 001, s. 2026
 ASSESSMENT_RULES = {
     "QUIZ": {"target_count": 20, "display_count": 10, "has_lecture": True},
-    "ASSIGNMENT": {"target_count": 20, "display_count": 10, "has_lecture": True},
-    "UNIT_TEST": {"target_count": 30, "display_count": 30, "has_lecture": False},
-    "MAJOR_EXAM": {"target_count": 40, "display_count": 40, "has_lecture": False, "hard_mode": True} 
+    "SUMMATIVE_TEST": {"target_count": 40, "display_count": 30, "has_lecture": False}, 
+    "TERM_EXAM": {"target_count": 80, "display_count": 60, "has_lecture": False, "hard_mode": True} 
 }
+
+# --- TIME-GATED EXAM SCHEDULE ---
+# The system will automatically force these exams when the date is reached.
+EXAM_SCHEDULE = [
+    {"start": "2026-07-06", "end": "2026-07-07", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM1_SUMMATIVE_1"},
+    {"start": "2026-07-28", "end": "2026-07-29", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM1_SUMMATIVE_2"},
+    {"start": "2026-08-28", "end": "2026-09-02", "exam_type": "TERM_EXAM", "topic_code": "TERM1_FINAL_EXAM"}
+]
+
+def get_active_scheduled_exam():
+    """Checks if today falls within a mandated examination window."""
+    today = datetime.date.today().isoformat()
+    for exam in EXAM_SCHEDULE:
+        if exam["start"] <= today <= exam["end"]:
+            return exam
+    return None
 
 # --- DIAGNOSTIC SCHEMAS (INCLUDES SLIDES) ---
 class MCQ(BaseModel):
@@ -48,12 +65,11 @@ class LessonContentSchema(BaseModel):
     lecture_content: str
     remediation_scaffolding: str  
     enrichment_scenario: str      
-    visual_decks: PresentationSet # The Slide Generator
+    visual_decks: PresentationSet
 
 class QuizSchema(BaseModel):
     quiz: list[MCQ]
 
-# --- NEW: AI NAVIGATOR SCHEMA ---
 class NextTopicSchema(BaseModel):
     selected_topic_code: str
     reasoning: str
@@ -63,7 +79,6 @@ class NextTopicSchema(BaseModel):
 def get_google_services():
     token_dict = json.loads(os.environ.get('GOOGLE_TOKEN_JSON'))
     creds = Credentials.from_authorized_user_info(token_dict)
-    # 4 APIs to handle Sheets, Drive, Forms, and Slides
     return (
         gspread.authorize(creds), 
         build('drive', 'v3', credentials=creds), 
@@ -73,7 +88,6 @@ def get_google_services():
 
 # --- THE 429 QUOTA FIX: SAFE RETRY WRAPPER ---
 def safe_sheet_action(action_func, *args, **kwargs):
-    """Wraps Google Sheets API calls in a retry block to prevent 429 crashes."""
     for attempt in range(4):
         try:
             return action_func(*args, **kwargs)
@@ -83,7 +97,7 @@ def safe_sheet_action(action_func, *args, **kwargs):
     print("❌ CRITICAL: Google Sheets API failed after 4 retries.")
     return None
 
-# --- MEMORY CACHE FUNCTIONS (ZERO API READS IN LOOP) ---
+# --- MEMORY CACHE FUNCTIONS ---
 def fetch_student_from_roster(roster_data, student_id):
     for r in roster_data:
         if str(r.get('Student_ID', '')).strip() == str(student_id).strip():
@@ -137,7 +151,7 @@ def save_items_to_bank(bank_sheet, bank_data, comp_code, strand_focus, mcq_list)
         new_rows.append(ordered_row)
         
     safe_sheet_action(bank_sheet.append_rows, new_rows)
-    bank_data.extend(new_rows) # Keep memory cache in sync!
+    bank_data.extend(new_rows)
 
 def save_master_lesson(vault_sheet, vault_data, comp_code, strand_focus, lesson_data, core_url, rem_url, adv_url):
     new_row = [
@@ -147,7 +161,6 @@ def save_master_lesson(vault_sheet, vault_data, comp_code, strand_focus, lesson_
     ]
     safe_sheet_action(vault_sheet.append_row, new_row)
     
-    # Sync memory cache
     vault_data.append({
         "Topic_Focus": comp_code, "Strand_Focus": strand_focus, "Lesson_Title": lesson_data.lesson_title,
         "Lecture_Content": format_math_text(lesson_data.lecture_content), "Remediation_Scaffolding": format_math_text(lesson_data.remediation_scaffolding),
@@ -181,7 +194,6 @@ def call_gemini_with_retry(contents, schema_class, retries=4):
             )
             raw_json = res.text.strip()
             
-            # Safe JSON extraction without confusing the markdown parser
             code_block_marker = "```"
             json_block_marker = "```json"
             
@@ -237,9 +249,7 @@ def get_quiz_prompt(curr, strand_focus, missing_count, tos_rules=None, hard_mode
     🛑 CRITICAL INSTRUCTION: For 'correct_answer', output ONLY the single uppercase letter (A, B, C, or D). Do not write the full answer text!
     """
 
-# --- NEW: THE NAVIGATOR PROMPT ENGINE ---
 def get_navigator_prompt(student_id, recent_score, current_topic, curr_data):
-    # Pass the entire curriculum map to Gemini so it knows the rules
     map_context = json.dumps(curr_data, indent=2)
     return f"""
     You are an automated Curriculum Navigator for a Senior High School Business Math class.
@@ -294,7 +304,6 @@ def create_google_slides(comp_code, tier_name, slide_data, drive_service, slides
     slides_service.presentations().batchUpdate(presentationId=pres_id, body={'requests': requests}).execute()
     drive_service.permissions().create(fileId=pres_id, body={'type': 'anyone', 'role': 'reader'}).execute()
     
-    # MODIFIED: Instead of returning the '/view' URL, this returns the direct PPTX export URL.
     return f"https://docs.google.com/presentation/d/{pres_id}/export/pptx"
 
 # --- THE FORM BUILDER ---
@@ -404,7 +413,6 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank
         attempts, corrects = int(safe_item.get('total_attempts', 0) or 0), int(safe_item.get('total_correct', 0) or 0)
         attempts += 1
         
-        # Safely guard against out-of-index if student choices array is magically shorter
         if idx < len(student_choices) and student_choices[idx] == ans:
             correct_count += 1
             corrects += 1
@@ -445,10 +453,10 @@ def main():
     args = parser.parse_args()
     run_mode = args.mode
 
-    print(f"Initializing Circular Grader System (V3.3 - AI Navigator Edition) [MODE: {run_mode.upper()}]...")
+    print(f"Initializing Circular Grader System (V3.3 - Hybrid Architecture) [MODE: {run_mode.upper()}]...")
     sheet_client, drive_service, form_service, slides_service = get_google_services()
     
-    # Read from the newly updated curriculum map JSON!
+    # Read from the newly updated curriculum map JSON
     with open("curriculum_map.json", "r") as f: curr_data = json.load(f)["ABM_BM11"]
     
     tos_rules = None
@@ -464,7 +472,7 @@ def main():
     vault_sheet = workbook.worksheet("Modules_Vault")
     roster_sheet = workbook.worksheet("Master_Roster")
     log_sheet = workbook.worksheet("Performance_Logs")
-    deploy_sheet = workbook.worksheet("Deployments_Library") # NEW TAB
+    deploy_sheet = workbook.worksheet("Deployments_Library") 
 
     all_values = sheet.get_all_values()
     headers = all_values[0]
@@ -473,7 +481,7 @@ def main():
     bank_data = bank_sheet.get_all_values()
     vault_data = vault_sheet.get_all_records()
     roster_data = roster_sheet.get_all_records()
-    deploy_data = deploy_sheet.get_all_records() # NEW TAB CACHE
+    deploy_data = deploy_sheet.get_all_records()
     print("✅ Databases loaded successfully. Read requests drop to 0 during loop!")
 
     global_harvest_cache = {}
@@ -499,8 +507,7 @@ def main():
         if run_mode == "grade" and rem_status != "Pending":
             continue
 
-        # --- PHASE 0: AUTO-ADVANCEMENT STATE MACHINE (UPGRADED) ---
-        # Safely resets a student's row for the next topic/retry AFTER n8n has sent the grade email
+        # --- PHASE 0: AUTO-ADVANCEMENT STATE MACHINE ---
         strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
         student_id = str(row.get("Student_ID", "")).strip()
         
@@ -508,15 +515,27 @@ def main():
             recent_score = row.get("Score", 0)
             print(f"🧠 AI Navigator analyzing progression for Student {student_id} (Last Score: {recent_score}%)...")
             
-            nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, curr_data)
-            nav_decision = call_gemini_with_retry(nav_prompt, NextTopicSchema)
+            # --- SCHEDULE INTERCEPTOR ---
+            active_exam = get_active_scheduled_exam()
+            is_course_complete = False
             
-            if nav_decision and not nav_decision.is_course_complete:
-                next_comp = nav_decision.selected_topic_code
-                print(f"⏩ AI Selected Next Topic: {next_comp} | Reasoning: {nav_decision.reasoning}")
+            if active_exam:
+                print(f"📅 Schedule Override: Activating {active_exam['exam_type']} for {student_id}")
+                next_comp = active_exam['topic_code']
+                next_type = active_exam['exam_type']
+            else:
+                nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, curr_data)
+                nav_decision = call_gemini_with_retry(nav_prompt, NextTopicSchema)
+                next_comp = nav_decision.selected_topic_code if nav_decision else comp_code
+                is_course_complete = nav_decision.is_course_complete if nav_decision else False
+                next_type = "QUIZ"
+            
+            if next_comp and not is_course_complete:
+                print(f"⏩ Selected Next Topic: {next_comp} | Type: {next_type}")
                 
                 safe_sheet_action(sheet.update_cells, [
-                    gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"ABM_BM11{next_comp}"),
+                    gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"ABM_BM11{next_comp}" if not active_exam else next_comp),
+                    gspread.Cell(row_idx, headers.index("Assessment_Type") + 1, next_type),
                     gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
                     gspread.Cell(row_idx, headers.index("Tries") + 1, 1),
                     gspread.Cell(row_idx, headers.index("Digital_Answers") + 1, ""),
@@ -542,7 +561,7 @@ def main():
             ])
             continue
 
-        # PHASE 1: GENERATION (Forms & Slides)
+        # --- PHASE 1: GENERATION (Forms & Slides) ---
         if form_gen_status == "READY":
             try_count = int(row.get("Tries", 1) or 1)
             cache_key = f"{comp_code}_Try_{try_count}"
@@ -574,7 +593,6 @@ def main():
             else:
                 instruction_body = "Please read each question carefully and select the best answer. No calculators allowed."
 
-            # --- NEW: Check the permanent Deployments_Library tab first ---
             if deploy_rec:
                 form_url = deploy_rec.get('Form_URL', '')
                 print(f"⚡ Sharing globally cached form URL for {comp_code} (Attempt #{try_count}) from Deployments Library...")
@@ -596,7 +614,7 @@ def main():
                     if quiz_data:
                         save_items_to_bank(bank_sheet, bank_data, comp_code, strand_focus, quiz_data.quiz)
                         combined_quiz.extend(quiz_data.quiz)
-
+                
                 if try_count == 1: final_form_quiz = combined_quiz[:display_limit]
                 elif try_count == 2: final_form_quiz = combined_quiz[display_limit:(display_limit*2)]
                 else: final_form_quiz = combined_quiz[:display_limit]
@@ -631,7 +649,7 @@ def main():
             time.sleep(2)
             continue
 
-        # PHASE 2: HARVESTING & GRADING
+        # --- PHASE 2: HARVESTING & GRADING ---
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             student_id = str(row.get("Student_ID", "")).strip()
             form_url = str(row.get("Form_URL", "")).strip()
@@ -675,7 +693,6 @@ def main():
                 vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
                 final_feedback = format_math_text(vault_rec.get('Remediation_Scaffolding', diag_feedback)) if vault_rec else diag_feedback
 
-            # --- NEW: Grab Slide URLs from Vault during grading to guarantee n8n has them ---
             core_url = vault_rec.get('Core_Slides', '') if vault_rec else ""
             rem_url = vault_rec.get('Remedial_Slides', '') if vault_rec else ""
             adv_url = vault_rec.get('Advanced_Slides', '') if vault_rec else ""
@@ -684,7 +701,7 @@ def main():
                 update_payload = [
                     gspread.Cell(row_idx, headers.index("Score") + 1, score),
                     gspread.Cell(row_idx, headers.index("Remediation") + 1, final_feedback),
-                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "GRADED") # Wakes up n8n!
+                    gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "GRADED") 
                 ]
                 
                 if status == "Needs Review" and try_count < 2:
@@ -693,7 +710,6 @@ def main():
                 else:
                     update_payload.append(gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, status))
                 
-                # Push Slide URLs to the sheet right before email dispatch
                 if "Core_Slides" in headers and core_url: update_payload.append(gspread.Cell(row_idx, headers.index("Core_Slides") + 1, core_url))
                 if "Remedial_Slides" in headers and rem_url: update_payload.append(gspread.Cell(row_idx, headers.index("Remedial_Slides") + 1, rem_url))
                 if "Advanced_Slides" in headers and adv_url: update_payload.append(gspread.Cell(row_idx, headers.index("Advanced_Slides") + 1, adv_url))
