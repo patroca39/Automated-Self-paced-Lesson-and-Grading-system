@@ -579,7 +579,8 @@ def main():
         display_limit = rules.get("display_count", 10)
         
         # Pull Strand_Focus directly from Master Roster for accurate context
-        strand_focus = str(profile.get("Strand_Focus", row.get("Strand_Focus", "ABM"))).strip().upper() if profile else "ABM"
+        raw_strand = str(profile.get("Strand_Focus", profile.get("Strand", profile.get("Specialization", row.get("Strand_Focus", "ABM"))))) if profile else row.get("Strand_Focus", "ABM")
+        strand_focus = raw_strand.strip().upper()
         student_context_profile = find_student_profile(context_data, strand_focus)
 
         # --- MODE ROUTER (GATEKEEPER) ---
@@ -675,7 +676,8 @@ def main():
         if form_gen_status == "READY":
             try_count = int(row.get("Tries", 1) or 1)
             
-            # FIXED: Added strand_focus to cache key so different specializations don't share the same Gen Math form!
+            # 🚨 FIXED: Ensure subject and strand focus are part of the cache key!
+            # This prevents a TVL_SMAW student from receiving the CORE_GENMATH form generated for a STEM student.
             cache_key = f"{subject_code}_{comp_code}_{strand_focus}_Try_{try_count}"
             
             vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
