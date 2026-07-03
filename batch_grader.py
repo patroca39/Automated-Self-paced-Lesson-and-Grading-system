@@ -530,7 +530,21 @@ def main():
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
         if not raw_comp_code: continue
         
-        subject_code = str(row.get("Subject_Code", "ABM_BM11")).strip()
+        # --- NEW: Fetch student profile early to access the "Subject" field from Master_Roster
+        student_id = str(row.get("Student_ID", "")).strip()
+        profile = fetch_student_from_roster(roster_data, student_id)
+        
+        raw_subject = str(profile.get("Subject", "")).strip() if profile else ""
+        
+        # Map exact spelling to internal Curriculum JSON keys
+        if raw_subject == "Gen Math":
+            subject_code = "CORE_GENMATH11"
+        elif raw_subject == "Business Math":
+            subject_code = "ABM_BM11"
+        else:
+            # Fallback for old/legacy rows
+            subject_code = str(row.get("Subject_Code", "ABM_BM11")).strip()
+            
         comp_code = raw_comp_code.replace(subject_code, "") 
         assessment_type = str(row.get("Assessment_Type", "QUIZ")).strip().upper()
         
@@ -541,8 +555,8 @@ def main():
         rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
         display_limit = rules.get("display_count", 10)
         
-        strand_focus = str(row.get("Strand_Focus", "ABM")).strip().upper()
-        # 🔄 UPDATED: Use recursive function to find exact TVL/Academic profile
+        # Pull Strand_Focus directly from Master Roster for accurate context
+        strand_focus = str(profile.get("Strand_Focus", row.get("Strand_Focus", "ABM"))).strip().upper() if profile else "ABM"
         student_context_profile = find_student_profile(context_data, strand_focus)
 
         # --- MODE ROUTER (GATEKEEPER) ---
@@ -556,8 +570,6 @@ def main():
             continue
 
         # --- PHASE 0: AUTO-ADVANCEMENT STATE MACHINE ---
-        student_id = str(row.get("Student_ID", "")).strip()
-        
         if form_gen_status == "ADVANCE_NEXT_TOPIC":
             recent_score = row.get("Score", 0)
             print(f"🧠 AI Navigator analyzing progression for Student {student_id} (Last Score: {recent_score}%)...")
@@ -726,7 +738,6 @@ def main():
 
         # --- PHASE 2: HARVESTING & GRADING ---
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
-            student_id = str(row.get("Student_ID", "")).strip()
             form_url = str(row.get("Form_URL", "")).strip()
             if not student_id: continue 
                 
@@ -742,12 +753,10 @@ def main():
 
             if not digital_answers: continue
 
-            profile = fetch_student_from_roster(roster_data, student_id)
             if not profile:
                 safe_sheet_action(sheet.update_cell, row_idx, headers.index("Remediation_Status") + 1, "Roster_Error")
                 continue
             
-            strand_focus = str(profile.get("Strand_Focus", "ABM")).strip().upper()
             try_count = int(row.get("Tries", 1) or 1)
 
             print(f"Grading Submission: Student {student_id} | Attempt #{try_count}")
