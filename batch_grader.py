@@ -110,14 +110,37 @@ def safe_sheet_action(action_func, *args, **kwargs):
 # --- CONTEXTUAL PROFILE FETCHER ---
 def find_student_profile(context_data, target_specialization):
     """Recursively searches the nested JSON to find the student's specific TVL or Academic track profile."""
-    if target_specialization == "DEFAULT": return context_data.get("DEFAULT")
+    if target_specialization == "DEFAULT": return context_data.get("DEFAULT", {})
     
-    for key, value in context_data.items():
-        if key == target_specialization:
-            return value
-        if isinstance(value, dict):
-            found = find_student_profile(value, target_specialization)
-            if found: return found
+    target = str(target_specialization).upper()
+    
+    # Robust Aliases to catch spreadsheet typing variations (e.g. "Kitchen Operation" -> "COOKERY")
+    aliases = {
+        "KITCHEN": "COOKERY", "CULINARY": "COOKERY", 
+        "SMAW": "SMAW", "WELDING": "SMAW", 
+        "EIM": "EIM", "ELECTRICAL": "EIM", 
+        "AUTO": "AUTOMOTIVE", "ICT": "CSS", 
+        "PROGRAMMING": "PROGRAMMING", "HUMSS": "HUMSS", 
+        "STEM": "STEM", "GAS": "GAS", "ABM": "ABM"
+    }
+    
+    search_key = target
+    for alias, true_key in aliases.items():
+        if alias in target:
+            search_key = true_key
+            break
+
+    def recursive_search(data, key_to_match):
+        for k, v in data.items():
+            if k.upper() == key_to_match:
+                return v
+            if isinstance(v, dict):
+                found = recursive_search(v, key_to_match)
+                if found: return found
+        return None
+
+    result = recursive_search(context_data, search_key)
+    if result: return result
             
     return context_data.get("DEFAULT", {})
 
@@ -651,7 +674,9 @@ def main():
         # --- PHASE 1: GENERATION (Forms & Slides) ---
         if form_gen_status == "READY":
             try_count = int(row.get("Tries", 1) or 1)
-            cache_key = f"{subject_code}_{comp_code}_Try_{try_count}"
+            
+            # FIXED: Added strand_focus to cache key so different specializations don't share the same Gen Math form!
+            cache_key = f"{subject_code}_{comp_code}_{strand_focus}_Try_{try_count}"
             
             vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
             deploy_rec = fetch_from_deployments(deploy_data, comp_code, strand_focus, try_count)
@@ -661,7 +686,7 @@ def main():
 
             if rules["has_lecture"]:
                 if not vault_rec:
-                    print(f"🚀 Master Content Missing for {comp_code}. Calling Gemini to build Reading & Slides...")
+                    print(f"🚀 Master Content Missing for {comp_code} ({strand_focus}). Calling Gemini to build Reading & Slides...")
                     lec_prompt = get_lecture_prompt(curr, strand_focus, student_context_profile)
                     lesson_data = call_gemini_with_retry(lec_prompt, LessonContentSchema)
                     
@@ -682,10 +707,10 @@ def main():
 
             if deploy_rec:
                 form_url = deploy_rec.get('Form_URL', '')
-                print(f"⚡ Sharing globally cached form URL for {comp_code} (Attempt #{try_count}) from Deployments Library...")
+                print(f"⚡ Sharing globally cached form URL for {comp_code} ({strand_focus}, Attempt #{try_count}) from Deployments Library...")
             elif cache_key in deployment_cache:
                 form_url = deployment_cache[cache_key]
-                print(f"⚡ Sharing session-cached form URL for {comp_code} (Attempt #{try_count})...")
+                print(f"⚡ Sharing session-cached form URL for {comp_code} ({strand_focus}, Attempt #{try_count})...")
             else:
                 banked_questions = fetch_banked_questions(bank_data, comp_code, strand_focus)
                 missing_count = max(0, rules["target_count"] - len(banked_questions))
