@@ -494,6 +494,39 @@
       "difficulty_level": 4,
       "prerequisites": ["PAD-IIi-10"],
       "mastery_threshold": 80
+    },
+    "TERM1_SUMMATIVE_1": {
+      "topic_name": "First Summative Test",
+      "content": "Summative Assessment on Fractions, Decimals, and Percentage",
+      "content_standard": "Comprehensive review of core calculation methods",
+      "performance_standard": "Solve comprehensive problems covering essential business math operations",
+      "learning_competency": "Comprehensive coverage of FO-Ia-1 through FO-Id-5",
+      "code": "TERM1_SUMMATIVE_1",
+      "difficulty_level": 3,
+      "prerequisites": [],
+      "mastery_threshold": 75
+    },
+    "TERM1_SUMMATIVE_2": {
+      "topic_name": "Second Summative Test",
+      "content": "Summative Assessment on Ratio, Proportion, Buying and Selling",
+      "content_standard": "Comprehensive review of real world business applications",
+      "performance_standard": "Solve comprehensive problems covering markup, markdown, commissions and rates",
+      "learning_competency": "Comprehensive coverage of RP-Ie-1 through BS-IIb-14",
+      "code": "TERM1_SUMMATIVE_2",
+      "difficulty_level": 3,
+      "prerequisites": [],
+      "mastery_threshold": 75
+    },
+    "TERM1_FINAL_EXAM": {
+      "topic_name": "First Term Comprehensive Examination",
+      "content": "Comprehensive Review of all Term 1 Topics",
+      "content_standard": "Comprehensive review across the entire term 1 syllabus",
+      "performance_standard": "Solve complex problems encompassing all modules seamlessly",
+      "learning_competency": "Solve comprehensive problems covering all Term 1 competencies",
+      "code": "TERM1_FINAL_EXAM",
+      "difficulty_level": 4,
+      "prerequisites": [],
+      "mastery_threshold": 75
     }
   }
 }
