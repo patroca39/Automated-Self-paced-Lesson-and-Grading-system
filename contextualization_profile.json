@@ -1,0 +1,144 @@
+{
+  "DEFAULT": {
+    "track": "General",
+    "cluster": "General",
+    "description": "General Senior High School Student.",
+    "teaching_strategy": "Use standard, relatable everyday scenarios like budgeting allowance, travel time, and daily chores.",
+    "real_world_context": "Everyday life, school events, basic personal finance."
+  },
+  "ACADEMIC_TRACK": {
+    "ABM": {
+      "track": "Academic",
+      "cluster": "Accountancy, Business, and Management",
+      "description": "Accountancy, Business, and Management strand.",
+      "teaching_strategy": "Speak like a corporate mentor. Emphasize profit margins, ROI, and financial literacy. Frame math as a tool for business growth.",
+      "real_world_context": "Stock market trends, retail store inventory, corporate salaries, business taxes, supply and demand."
+    },
+    "STEM": {
+      "track": "Academic",
+      "cluster": "Science, Technology, Engineering, and Mathematics",
+      "description": "Science, Technology, Engineering, and Mathematics strand.",
+      "teaching_strategy": "Focus on logic, precise technical terminology, and the scientific method. Frame math as the foundational language of the universe.",
+      "real_world_context": "Physics trajectories, laboratory experiment chemical yields, algorithmic efficiency, structural engineering calculations."
+    },
+    "HUMSS": {
+      "track": "Academic",
+      "cluster": "Humanities and Social Sciences",
+      "description": "Humanities and Social Sciences strand.",
+      "teaching_strategy": "Emphasize societal impact, human behavior, and qualitative interpretation. Frame math as a tool for social statistics.",
+      "real_world_context": "Population growth models, survey data analysis, political polling statistics, historical timeline intervals, psychological metrics."
+    },
+    "GAS": {
+      "track": "Academic",
+      "cluster": "General Academic Strand",
+      "description": "General Academic Strand.",
+      "teaching_strategy": "Use diverse, cross-disciplinary examples showing how math applies broadly across different college courses.",
+      "real_world_context": "A balanced mix of basic business, scientific discovery, social science statistics, and practical life skills."
+    }
+  },
+  "TVL_TRACK": {
+    "INDUSTRIAL_ARTS": {
+      "SMAW": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Industrial Arts",
+        "description": "Shielded Metal Arc Welding Specialization.",
+        "teaching_strategy": "Be direct, practical, and hands-on. Frame math as essential for precision engineering and shop safety.",
+        "real_world_context": "Metal fabrication measurements, welding rod tensile strength limits, geometric angles of pipe joints, raw material cost estimation."
+      },
+      "EIM": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Industrial Arts",
+        "description": "Electrical Installation and Maintenance Specialization.",
+        "teaching_strategy": "Focus on safety, logical circuits, and systems thinking. Use exact electrical units.",
+        "real_world_context": "Voltage drops (Ohm's Law), wattage load calculations for breakers, wiring length estimation, circuit resistance, power consumption."
+      },
+      "AUTOMOTIVE": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Industrial Arts",
+        "description": "Automotive Servicing Specialization.",
+        "teaching_strategy": "Speak like a master mechanic. Relate math to mechanical advantage, engine performance, and shop operations.",
+        "real_world_context": "Engine displacement volume, gear ratios, torque specifications, fuel efficiency (km/L), auto parts inventory costing."
+      },
+      "CARPENTRY": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Industrial Arts",
+        "description": "Carpentry and Masonry Specialization.",
+        "teaching_strategy": "Focus on spatial reasoning, geometry, and structural integrity. Frame math as the blueprint for building.",
+        "real_world_context": "Pythagorean theorem for squaring corners, calculating board feet of lumber, concrete mixing ratios, roofing pitch angles."
+      }
+    },
+    "HOME_ECONOMICS": {
+      "COOKERY": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Home Economics",
+        "description": "Cookery and Kitchen Operations Specialization.",
+        "teaching_strategy": "Use a fast-paced, culinary-focused tone. Relate math directly to the kitchen environment, food quality, and restaurant profitability.",
+        "real_world_context": "Recipe yield scaling, ingredient weight conversions, food costing and menu pricing, baking temperature conversions, inventory."
+      },
+      "BPP": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Home Economics",
+        "description": "Bread and Pastry Production Specialization.",
+        "teaching_strategy": "Emphasize absolute precision and chemistry. Frame math as the exact science of baking.",
+        "real_world_context": "Baker's percentages, scaling dough weights, precise volumetric measurements, oven time calculations, packaging unit costs."
+      },
+      "TOURISM": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Home Economics",
+        "description": "Tourism Promotion and Hospitality Specialization.",
+        "teaching_strategy": "Speak with a professional, customer-centric tone. Focus on logistics, time management, and international standards.",
+        "real_world_context": "Foreign currency exchange rates, hotel occupancy rate percentages, flight itinerary time zone conversions, event catering headcounts."
+      }
+    },
+    "ICT": {
+      "CSS": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Information and Communications Technology",
+        "description": "Computer Systems Servicing Specialization.",
+        "teaching_strategy": "Use a tech-savvy, troubleshooting tone. Relate math to digital storage, networking, and hardware specifications.",
+        "real_world_context": "IP address subnetting, data storage conversions (MB to GB to TB), network bandwidth speeds, hardware upgrade budgets."
+      },
+      "PROGRAMMING": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Information and Communications Technology",
+        "description": "Computer Programming Specialization.",
+        "teaching_strategy": "Focus on logic, variables, and algorithmic thinking. Frame math as the underlying syntax of software.",
+        "real_world_context": "Big O notation and algorithm efficiency, array indexing, pixel coordinate geometry for UI design, server cost estimation."
+      }
+    },
+    "AGRI_FISHERY_ARTS": {
+      "AGRI_CROP": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Agri-Fishery Arts",
+        "description": "Agricultural Crops Production Specialization.",
+        "teaching_strategy": "Be practical and nature-focused. Relate math to yield optimization, biological cycles, and farm economics.",
+        "real_world_context": "Fertilizer-to-water dilution ratios, land area calculation (hectares), seasonal planting timelines, crop harvest profit margins."
+      },
+      "ANIMAL_PROD": {
+        "track": "Technical-Vocational-Livelihood (TVL)",
+        "cluster": "Agri-Fishery Arts",
+        "description": "Animal Production Specialization.",
+        "teaching_strategy": "Focus on biology, growth rates, and livestock management.",
+        "real_world_context": "Livestock feed consumption rates, pen area density calculations, animal weight tracking formulas, market price estimations."
+      }
+    }
+  },
+  "ARTS_AND_DESIGN_TRACK": {
+    "ARTS_DESIGN": {
+      "track": "Arts and Design",
+      "cluster": "Arts and Design",
+      "description": "Arts and Design track.",
+      "teaching_strategy": "Focus on aesthetics, proportions, and spatial reasoning. Relate mathematical precision to visual harmony.",
+      "real_world_context": "The Golden Ratio in graphic design, budgeting for canvas and art supplies, acoustic frequencies in music, scale models for stages."
+    }
+  },
+  "SPORTS_TRACK": {
+    "SPORTS": {
+      "track": "Sports",
+      "cluster": "Sports",
+      "description": "Sports track.",
+      "teaching_strategy": "Use high-energy, athletic-focused language. Relate math to physical performance, kinesiology, and sports management.",
+      "real_world_context": "Batting averages, biomechanical angles of a jump, tournament bracket scheduling, athlete dietary caloric intake, velocity."
+    }
+  }
+}
