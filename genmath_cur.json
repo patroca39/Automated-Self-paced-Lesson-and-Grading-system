@@ -1,0 +1,570 @@
+{
+  "GM-Ia-1": {
+    "topic_name": "Functions in Real-Life",
+    "content": "Functions and their Graphs",
+    "learning_competency": "1. Represents real-life situations using functions, including piece-wise functions.",
+    "difficulty_level": 1,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GM-Ia-2": {
+    "topic_name": "Evaluating Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "2. Evaluates a function.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ia-1"],
+    "mastery_threshold": 75
+  },
+  "GM-Ia-3": {
+    "topic_name": "Operations on Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "3. Performs addition, subtraction, multiplication, division, and composition of functions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ia-2"],
+    "mastery_threshold": 80
+  },
+  "GM-Ia-4": {
+    "topic_name": "Solving Problems Involving Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "4. Solves problems involving functions.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-Ia-3"],
+    "mastery_threshold": 80
+  },
+  "GM-Ib-1": {
+    "topic_name": "Real-Life Rational Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "5. Represents real-life situations using rational functions.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ia-4"],
+    "mastery_threshold": 75
+  },
+  "GM-Ib-2": {
+    "topic_name": "Distinguishing Rational Formats",
+    "content": "Functions and their Graphs",
+    "learning_competency": "6. Distinguishes rational function, rational equation, and rational inequality.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ib-1"],
+    "mastery_threshold": 75
+  },
+  "GM-Ib-3": {
+    "topic_name": "Solving Rational Equations and Inequalities",
+    "content": "Functions and their Graphs",
+    "learning_competency": "7. Solves rational equations and inequalities.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ib-2"],
+    "mastery_threshold": 80
+  },
+  "GM-Ib-4": {
+    "topic_name": "Representing Rational Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "8. Represents a rational function through its: (a) table of values, (b) graph, and (c) equation.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ib-2"],
+    "mastery_threshold": 75
+  },
+  "GM-Ib-5": {
+    "topic_name": "Domain and Range of Rational Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "9. Finds the domain and range of a rational function.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ib-4"],
+    "mastery_threshold": 75
+  },
+  "GM-Ic-1": {
+    "topic_name": "Intercepts, Zeroes, and Asymptotes",
+    "content": "Functions and their Graphs",
+    "learning_competency": "10. Determines the: (a) intercepts (b) zeroes; and (c) asymptotes of rational functions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ib-5"],
+    "mastery_threshold": 75
+  },
+  "GM-Ic-2": {
+    "topic_name": "Graphing Rational Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "11. Graphs rational functions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ic-1"],
+    "mastery_threshold": 80
+  },
+  "GM-Ic-3": {
+    "topic_name": "Rational Function Problems",
+    "content": "Functions and their Graphs",
+    "learning_competency": "12. Solves problems involving rational functions, equations, and inequalities.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-Ic-2", "GM-Ib-3"],
+    "mastery_threshold": 80
+  },
+  "GENMATH_TERM1_SUMMATIVE_1": {
+    "topic_name": "First Summative Test (Gen Math)",
+    "content": "Summative Assessment on Functions and Rational Functions",
+    "learning_competency": "Comprehensive coverage of GM-Ia-1 through GM-Ic-3.",
+    "difficulty_level": 3,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GM-Id-1": {
+    "topic_name": "One-to-One Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "1. Represents real-life situations using one-to-one functions.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ic-3"],
+    "mastery_threshold": 75
+  },
+  "GM-Id-2": {
+    "topic_name": "Inverse of One-to-One Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "2. Determines the inverse of a one-to-one function.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Id-1"],
+    "mastery_threshold": 75
+  },
+  "GM-Id-3": {
+    "topic_name": "Representing Inverse Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "3. Represents an inverse function through its: (a) table of values, and (b) graph.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Id-2"],
+    "mastery_threshold": 75
+  },
+  "GM-Id-4": {
+    "topic_name": "Domain and Range of Inverse Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "4. Finds the domain and range of an inverse function.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Id-3"],
+    "mastery_threshold": 75
+  },
+  "GM-Ie-1": {
+    "topic_name": "Graphing Inverse Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "5. Graphs inverse functions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Id-4"],
+    "mastery_threshold": 80
+  },
+  "GM-Ie-2": {
+    "topic_name": "Inverse Function Problems",
+    "content": "Functions and their Graphs",
+    "learning_competency": "6. Solves problems involving inverse functions.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-Ie-1"],
+    "mastery_threshold": 80
+  },
+  "GM-Ie-3": {
+    "topic_name": "Real-Life Exponential Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "7. Represents real-life situations using exponential functions.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ie-2"],
+    "mastery_threshold": 75
+  },
+  "GM-Ie-4": {
+    "topic_name": "Distinguishing Exponential Formats",
+    "content": "Functions and their Graphs",
+    "learning_competency": "8. Distinguishes between exponential function, exponential equation, and exponential inequality.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ie-3"],
+    "mastery_threshold": 75
+  },
+  "GM-Ie-f-1": {
+    "topic_name": "Solving Exponential Equations",
+    "content": "Functions and their Graphs",
+    "learning_competency": "9. Solves exponential equations and inequalities.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ie-4"],
+    "mastery_threshold": 80
+  },
+  "GM-If-2": {
+    "topic_name": "Representing Exponential Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "10. Represents an exponential function through its: (a) table of values, (b) graph, and (c) equation.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ie-4"],
+    "mastery_threshold": 75
+  },
+  "GM-If-3": {
+    "topic_name": "Domain and Range of Exponential Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "11. Finds the domain and range of an exponential function.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-If-2"],
+    "mastery_threshold": 75
+  },
+  "GM-If-4": {
+    "topic_name": "Intercepts, Zeroes, Asymptotes of Exponential Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "12. Determines the intercepts, zeroes, and asymptotes of an exponential function.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-If-3"],
+    "mastery_threshold": 75
+  },
+  "GM-Ig-1": {
+    "topic_name": "Graphing Exponential Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "13. Graphs exponential functions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-If-4"],
+    "mastery_threshold": 80
+  },
+  "GM-Ig-2": {
+    "topic_name": "Exponential Function Problems",
+    "content": "Functions and their Graphs",
+    "learning_competency": "14. Solves problems involving exponential functions, equations, and inequalities.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-Ig-1", "GM-Ie-f-1"],
+    "mastery_threshold": 80
+  },
+  "GENMATH_TERM1_SUMMATIVE_2": {
+    "topic_name": "Second Summative Test (Gen Math)",
+    "content": "Summative Assessment on Inverse and Exponential Functions",
+    "learning_competency": "Comprehensive coverage of GM-Id-1 through GM-Ig-2.",
+    "difficulty_level": 3,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GM-Ih-1": {
+    "topic_name": "Real-Life Logarithmic Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "15. Represents real-life situations using logarithmic functions.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ig-2"],
+    "mastery_threshold": 75
+  },
+  "GM-Ih-2": {
+    "topic_name": "Distinguishing Logarithmic Formats",
+    "content": "Functions and their Graphs",
+    "learning_competency": "16. Distinguishes logarithmic function, logarithmic equation, and logarithmic inequality.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ih-1"],
+    "mastery_threshold": 75
+  },
+  "GM-Ih-3": {
+    "topic_name": "Laws of Logarithms",
+    "content": "Functions and their Graphs",
+    "learning_competency": "17. Illustrates the laws of logarithms.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ih-2"],
+    "mastery_threshold": 75
+  },
+  "GM-Ih-i-1": {
+    "topic_name": "Solving Logarithmic Equations",
+    "content": "Functions and their Graphs",
+    "learning_competency": "18. Solves logarithmic equations and inequalities.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ih-3"],
+    "mastery_threshold": 80
+  },
+  "GM-Ii-2": {
+    "topic_name": "Representing Logarithmic Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "19. Represents a logarithmic function through its: (a) table of values, (b) graph, and (c) equation.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ih-2"],
+    "mastery_threshold": 75
+  },
+  "GM-Ii-3": {
+    "topic_name": "Domain and Range of Logarithmic Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "20. Finds the domain and range of a logarithmic function.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-Ii-2"],
+    "mastery_threshold": 75
+  },
+  "GM-Ii-4": {
+    "topic_name": "Intercepts, Zeroes, Asymptotes of Logarithmic Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "21. Determines the intercepts, zeroes, and asymptotes of logarithmic functions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ii-3"],
+    "mastery_threshold": 75
+  },
+  "GM-Ij-1": {
+    "topic_name": "Graphing Logarithmic Functions",
+    "content": "Functions and their Graphs",
+    "learning_competency": "22. Graphs logarithmic functions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-Ii-4"],
+    "mastery_threshold": 80
+  },
+  "GM-Ij-2": {
+    "topic_name": "Logarithmic Function Problems",
+    "content": "Functions and their Graphs",
+    "learning_competency": "23. Solves problems involving logarithmic functions, equations, and inequalities.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-Ij-1", "GM-Ih-i-1"],
+    "mastery_threshold": 80
+  },
+  "GENMATH_TERM1_FINAL_EXAM": {
+    "topic_name": "First Term Comprehensive Examination",
+    "content": "Comprehensive Review of Functions, Rational, Inverse, Exponential, and Logarithmic Concepts",
+    "learning_competency": "Solve comprehensive problems covering all Term 1 competencies.",
+    "difficulty_level": 4,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GM-IIa-1": {
+    "topic_name": "Simple and Compound Interests",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "24. Illustrates simple and compound interests.",
+    "difficulty_level": 1,
+    "prerequisites": ["GM-Ij-2"],
+    "mastery_threshold": 75
+  },
+  "GM-IIa-2": {
+    "topic_name": "Distinguishing Simple and Compound Interests",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "25. Distinguishes between simple and compound interests.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIa-1"],
+    "mastery_threshold": 75
+  },
+  "GM-IIa-b-1": {
+    "topic_name": "Computing Interest and Values",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "26. Computes interest, maturity value, future value, and present value in simple interest and compound interest environment.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIa-2"],
+    "mastery_threshold": 80
+  },
+  "GM-IIb-2": {
+    "topic_name": "Simple and Compound Interest Problems",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "27. Solves problems involving simple and compound interests.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-IIa-b-1"],
+    "mastery_threshold": 80
+  },
+  "GM-IIc-1": {
+    "topic_name": "Simple and General Annuities",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "28. Illustrates simple and general annuities.",
+    "difficulty_level": 1,
+    "prerequisites": ["GM-IIb-2"],
+    "mastery_threshold": 75
+  },
+  "GM-IIc-2": {
+    "topic_name": "Distinguishing Simple and General Annuities",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "29. Distinguishes between simple and general annuities.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIc-1"],
+    "mastery_threshold": 75
+  },
+  "GM-IIc-d-1": {
+    "topic_name": "Future and Present Value of Annuities",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "30. Finds the future value and present value of both simple annuities and general annuities.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIc-2"],
+    "mastery_threshold": 80
+  },
+  "GM-IId-2": {
+    "topic_name": "Fair Market Value of Cash Flow",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "31. Calculates the fair market value of a cash flow stream that includes an annuity.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIc-d-1"],
+    "mastery_threshold": 80
+  },
+  "GM-IId-3": {
+    "topic_name": "Present Value of Deferred Annuity",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "32. Calculates the present value and period of deferral of a deferred annuity.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIc-d-1"],
+    "mastery_threshold": 80
+  },
+  "GENMATH_TERM2_SUMMATIVE_1": {
+    "topic_name": "First Summative Test Term 2 (Gen Math)",
+    "content": "Summative Assessment on Interests and Annuities",
+    "learning_competency": "Comprehensive coverage of GM-IIa-1 through GM-IId-3.",
+    "difficulty_level": 3,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GM-IIe-1": {
+    "topic_name": "Illustrating Stocks and Bonds",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "33. Illustrate stocks and bonds.",
+    "difficulty_level": 1,
+    "prerequisites": ["GM-IId-3"],
+    "mastery_threshold": 75
+  },
+  "GM-IIe-2": {
+    "topic_name": "Distinguishing Stocks and Bonds",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "34. Distinguishes between stocks and bonds.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIe-1"],
+    "mastery_threshold": 75
+  },
+  "GM-IIe-3": {
+    "topic_name": "Markets for Stocks and Bonds",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "35. Describes the different markets for stocks and bonds.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIe-2"],
+    "mastery_threshold": 75
+  },
+  "GM-IIe-4": {
+    "topic_name": "Market Indices for Stocks and Bonds",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "36. Analyzes the different market indices for stocks and bonds.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIe-3"],
+    "mastery_threshold": 80
+  },
+  "GM-IIe-5": {
+    "topic_name": "Theory of Efficient Markets",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "37. Interprets the theory of efficient markets.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIe-4"],
+    "mastery_threshold": 75
+  },
+  "GM-IIf-1": {
+    "topic_name": "Business and Consumer Loans",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "38. Illustrates business and consumer loans.",
+    "difficulty_level": 1,
+    "prerequisites": ["GM-IIe-5"],
+    "mastery_threshold": 75
+  },
+  "GM-IIf-2": {
+    "topic_name": "Distinguishing Business and Consumer Loans",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "39. Distinguishes between business and consumer loans.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIf-1"],
+    "mastery_threshold": 75
+  },
+  "GM-IIf-3": {
+    "topic_name": "Business and Consumer Loan Problems",
+    "content": "Basic Business Mathematics",
+    "learning_competency": "40. Solves problems involving business and consumer loans (amortization, mortgage).",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-IIf-2"],
+    "mastery_threshold": 80
+  },
+  "GENMATH_TERM2_SUMMATIVE_2": {
+    "topic_name": "Second Summative Test Term 2 (Gen Math)",
+    "content": "Summative Assessment on Stocks, Bonds, and Loans",
+    "learning_competency": "Comprehensive coverage of GM-IIe-1 through GM-IIf-3.",
+    "difficulty_level": 3,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GENMATH_TERM2_FINAL_EXAM": {
+    "topic_name": "Second Term Comprehensive Examination",
+    "content": "Comprehensive Review of Basic Business Mathematics",
+    "learning_competency": "Solve comprehensive problems covering all Term 2 Business Math competencies.",
+    "difficulty_level": 4,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GM-IIg-1": {
+    "topic_name": "Illustrating Propositions",
+    "content": "Logic",
+    "learning_competency": "41. Illustrates a proposition.",
+    "difficulty_level": 1,
+    "prerequisites": ["GM-IIf-3"],
+    "mastery_threshold": 75
+  },
+  "GM-IIg-2": {
+    "topic_name": "Symbolizing Propositions",
+    "content": "Logic",
+    "learning_competency": "42. Symbolizes propositions.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIg-1"],
+    "mastery_threshold": 75
+  },
+  "GM-IIg-3": {
+    "topic_name": "Simple vs Compound Propositions",
+    "content": "Logic",
+    "learning_competency": "43. Distinguishes between simple and compound propositions.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIg-2"],
+    "mastery_threshold": 75
+  },
+  "GM-IIg-4": {
+    "topic_name": "Operations on Propositions",
+    "content": "Logic",
+    "learning_competency": "44. Performs the different types of operations on propositions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIg-3"],
+    "mastery_threshold": 80
+  },
+  "GM-IIh-1": {
+    "topic_name": "Truth Values of Propositions",
+    "content": "Logic",
+    "learning_competency": "45. Determines the truth values of propositions.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIg-4"],
+    "mastery_threshold": 80
+  },
+  "GM-IIh-2": {
+    "topic_name": "Forms of Conditional Propositions",
+    "content": "Logic",
+    "learning_competency": "46. Illustrates the different forms of conditional propositions.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIh-1"],
+    "mastery_threshold": 75
+  },
+  "GENMATH_TERM3_SUMMATIVE_1": {
+    "topic_name": "First Summative Test Term 3 (Gen Math)",
+    "content": "Summative Assessment on Logic and Propositions",
+    "learning_competency": "Comprehensive coverage of GM-IIg-1 through GM-IIh-2.",
+    "difficulty_level": 3,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  },
+  "GM-IIi-1": {
+    "topic_name": "Tautologies and Fallacies",
+    "content": "Logic",
+    "learning_competency": "47. Illustrates different types of tautologies and fallacies.",
+    "difficulty_level": 2,
+    "prerequisites": ["GM-IIh-2"],
+    "mastery_threshold": 75
+  },
+  "GM-IIi-2": {
+    "topic_name": "Validity of Categorical Syllogisms",
+    "content": "Logic",
+    "learning_competency": "48. Determines the validity of categorical syllogisms.",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIi-1"],
+    "mastery_threshold": 80
+  },
+  "GM-IIi-3": {
+    "topic_name": "Validity of Real-Life Arguments",
+    "content": "Logic",
+    "learning_competency": "49. Establishes the validity and falsity of real-life arguments using logical propositions, syllogisms, and fallacies.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-IIi-2"],
+    "mastery_threshold": 80
+  },
+  "GM-IIj-1": {
+    "topic_name": "Methods of Proof and Disproof",
+    "content": "Logic",
+    "learning_competency": "50. Illustrates the different methods of proof (direct and indirect) and disproof (indirect and by counterexample).",
+    "difficulty_level": 3,
+    "prerequisites": ["GM-IIi-3"],
+    "mastery_threshold": 80
+  },
+  "GM-IIj-2": {
+    "topic_name": "Justifying Mathematical Statements",
+    "content": "Logic",
+    "learning_competency": "51. Justifies mathematical and real-life statements using the different methods of proof and disproof.",
+    "difficulty_level": 4,
+    "prerequisites": ["GM-IIj-1"],
+    "mastery_threshold": 80
+  },
+  "GENMATH_TERM3_FINAL_EXAM": {
+    "topic_name": "Third Term Comprehensive Examination",
+    "content": "Comprehensive Review of Logic, Syllogisms, and Proofs",
+    "learning_competency": "Solve comprehensive problems covering all Term 3 Logic competencies.",
+    "difficulty_level": 4,
+    "prerequisites": [],
+    "mastery_threshold": 75
+  }
+}
