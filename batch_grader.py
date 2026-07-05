@@ -332,12 +332,13 @@ def get_navigator_prompt(student_id, recent_score, current_topic, curr_data):
     Use the `update_student_progress` tool to enact your decision.
     """
 
-# --- NEW: CLASS REFLECTION PROMPT ENGINE ---
-def get_class_reflection_prompt(stats_data):
+# --- UPDATED: CLASS REFLECTION PROMPT ENGINE ---
+def get_class_reflection_prompt(stats_data, section_name):
+    target_context = "the entire school across all sections" if section_name == "ALL" else f"the specific class section '{section_name}'"
     return f"""
-    You are a Master Teacher and AI Data Analyst reviewing today's automated assessment grading batch.
+    You are a Master Teacher and AI Data Analyst reviewing today's automated assessment grading batch for {target_context}.
     
-    BATCH STATISTICS:
+    BATCH STATISTICS FOR {section_name}:
     {stats_data}
     
     YOUR MISSION:
@@ -345,7 +346,7 @@ def get_class_reflection_prompt(stats_data):
     
     1. daily_output: Summarize exactly what happened today (e.g., "Graded X students across topics Y and Z. Average score was W%."). Keep it short and factual.
     2. weekly_output: Project the weekly trajectory or state the general momentum based on today's pass/fail ratio and average score.
-    3. reflection: Provide a qualitative teacher's reflection. What concepts might need reteaching? Are the students excelling? Provide actionable insights.
+    3. reflection: Provide a qualitative teacher's reflection for {target_context}. What concepts might need reteaching? Are the students excelling? Provide actionable insights.
     """
 
 # --- THE SLIDE BUILDER ENGINE ---
@@ -518,6 +519,15 @@ def grade_submission_natively(student_answers_str, comp_code, strand_focus, bank
         
     return score, format_math_text("\n".join(unique_feedback)), None
 
+def get_empty_stats():
+    return {
+        "graded_today": 0,
+        "passed": 0,
+        "needs_review": 0,
+        "average_batch_score": 0,
+        "topics_assessed": set()
+    }
+
 # --- MAIN LOOP ---
 def main():
     parser = argparse.ArgumentParser()
@@ -579,13 +589,9 @@ def main():
     global_harvest_cache = {}
     deployment_cache = {} 
 
-    # --- NEW: Statistical Tracker for the Class Reflection ---
-    run_stats = {
-        "graded_today": 0,
-        "passed": 0,
-        "needs_review": 0,
-        "average_batch_score": 0,
-        "topics_assessed": set()
+    # --- UPDATED: Track Stats per Section AND for ALL ---
+    run_stats_by_section = {
+        "ALL": get_empty_stats()
     }
 
     for row_idx, row in enumerate(all_records, start=2):
@@ -597,6 +603,7 @@ def main():
         profile = fetch_student_from_roster(roster_data, student_id)
         
         raw_subject = str(profile.get("Subject", "")).strip() if profile else ""
+        raw_section = str(profile.get("Section", profile.get("Grade_Section", profile.get("Class", "Unassigned")))).strip() if profile else "Unassigned"
         
         # Map exact spelling to internal Curriculum JSON keys
         if raw_subject == "Gen Math":
@@ -841,15 +848,23 @@ def main():
                 vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
                 final_feedback = format_math_text(vault_rec.get('Remediation_Scaffolding', diag_feedback)) if vault_rec else diag_feedback
 
-            # --- NEW: UPDATE STATS TRACKER FOR THE TEACHER REFLECTION ---
-            run_stats["graded_today"] += 1
-            run_stats["topics_assessed"].add(comp_code)
+            # --- UPDATED: AGGREGATE STATS TRACKER PER SECTION & FOR 'ALL' ---
+            if raw_section not in run_stats_by_section:
+                run_stats_by_section[raw_section] = get_empty_stats()
             
-            # Running Average Formula
-            run_stats["average_batch_score"] = ((run_stats["average_batch_score"] * (run_stats["graded_today"] - 1)) + score) / run_stats["graded_today"]
+            # Helper to update a specific stats dictionary
+            def update_stats(stats_dict):
+                stats_dict["graded_today"] += 1
+                stats_dict["topics_assessed"].add(comp_code)
+                # Running Average Formula
+                stats_dict["average_batch_score"] = ((stats_dict["average_batch_score"] * (stats_dict["graded_today"] - 1)) + score) / stats_dict["graded_today"]
+                if status in ["Excelling", "Passing"]: 
+                    stats_dict["passed"] += 1
+                else: 
+                    stats_dict["needs_review"] += 1
             
-            if status in ["Excelling", "Passing"]: run_stats["passed"] += 1
-            else: run_stats["needs_review"] += 1
+            update_stats(run_stats_by_section["ALL"])
+            update_stats(run_stats_by_section[raw_section])
 
             core_url = vault_rec.get('Core_Slides', '') if vault_rec else ""
             rem_url = vault_rec.get('Remedial_Slides', '') if vault_rec else ""
@@ -881,27 +896,29 @@ def main():
             
             time.sleep(2)
             
-    # --- NEW: CLASS REFLECTION ENGINE (Runs at the very end of grading) ---
-    if run_stats["graded_today"] > 0:
-        print(f"\n📊 Generating AI Class Reflection based on {run_stats['graded_today']} graded submissions...")
-        
-        # Convert set to list so it can be serialized to JSON
-        run_stats["topics_assessed"] = list(run_stats["topics_assessed"])
-        run_stats["average_batch_score"] = round(run_stats["average_batch_score"], 2)
-        
-        summary_prompt = get_class_reflection_prompt(json.dumps(run_stats, indent=2))
-        summary_data = call_gemini_with_retry(summary_prompt, ClassSummarySchema)
-        
-        if summary_data:
-            today_str = datetime.date.today().strftime("%m/%d/%Y")
-            safe_sheet_action(summary_sheet.append_row, [
-                today_str, 
-                "ALL", 
-                summary_data.daily_output, 
-                summary_data.weekly_output, 
-                summary_data.reflection
-            ])
-            print("✅ Class Summary & Reflection successfully pushed to Google Sheets!")
+    # --- UPDATED: CLASS REFLECTION ENGINE (Runs for ALL and Each Specific Section) ---
+    today_str = datetime.date.today().strftime("%m/%d/%Y")
+    
+    for section_name, stats in run_stats_by_section.items():
+        if stats["graded_today"] > 0:
+            print(f"\n📊 Generating AI Class Reflection for {section_name} based on {stats['graded_today']} graded submissions...")
+            
+            # Convert set to list so it can be serialized to JSON
+            stats["topics_assessed"] = list(stats["topics_assessed"])
+            stats["average_batch_score"] = round(stats["average_batch_score"], 2)
+            
+            summary_prompt = get_class_reflection_prompt(json.dumps(stats, indent=2), section_name)
+            summary_data = call_gemini_with_retry(summary_prompt, ClassSummarySchema)
+            
+            if summary_data:
+                safe_sheet_action(summary_sheet.append_row, [
+                    today_str, 
+                    section_name, 
+                    summary_data.daily_output, 
+                    summary_data.weekly_output, 
+                    summary_data.reflection
+                ])
+                print(f"✅ Class Summary & Reflection for {section_name} successfully pushed to Google Sheets!")
 
 if __name__ == '__main__':
     main()
