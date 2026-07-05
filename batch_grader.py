@@ -78,6 +78,12 @@ class LessonContentSchema(BaseModel):
 class QuizSchema(BaseModel):
     quiz: list[MCQ]
 
+# --- NEW: CLASS REFLECTION SCHEMA ---
+class ClassSummarySchema(BaseModel):
+    daily_output: str
+    weekly_output: str
+    reflection: str
+
 # --- AI NAVIGATOR TOOL ---
 def update_student_progress(selected_topic_code: str, reasoning: str, is_course_complete: bool):
     """
@@ -326,6 +332,22 @@ def get_navigator_prompt(student_id, recent_score, current_topic, curr_data):
     Use the `update_student_progress` tool to enact your decision.
     """
 
+# --- NEW: CLASS REFLECTION PROMPT ENGINE ---
+def get_class_reflection_prompt(stats_data):
+    return f"""
+    You are a Master Teacher and AI Data Analyst reviewing today's automated assessment grading batch.
+    
+    BATCH STATISTICS:
+    {stats_data}
+    
+    YOUR MISSION:
+    Write a concise, professional summary of this data to be displayed on the Teacher Dashboard.
+    
+    1. daily_output: Summarize exactly what happened today (e.g., "Graded X students across topics Y and Z. Average score was W%."). Keep it short and factual.
+    2. weekly_output: Project the weekly trajectory or state the general momentum based on today's pass/fail ratio and average score.
+    3. reflection: Provide a qualitative teacher's reflection. What concepts might need reteaching? Are the students excelling? Provide actionable insights.
+    """
+
 # --- THE SLIDE BUILDER ENGINE ---
 def create_google_slides(comp_code, tier_name, slide_data, drive_service, slides_service):
     print(f"🎨 Building {tier_name} Slides for {comp_code}...")
@@ -536,6 +558,14 @@ def main():
     log_sheet = workbook.worksheet("Performance_Logs")
     deploy_sheet = workbook.worksheet("Deployments_Library") 
 
+    # --- NEW: Safe handling for Class_Summary sheet ---
+    try:
+        summary_sheet = workbook.worksheet("Class_Summary")
+    except Exception:
+        print("Creating missing Class_Summary worksheet...")
+        summary_sheet = workbook.add_worksheet(title="Class_Summary", rows="100", cols="5")
+        safe_sheet_action(summary_sheet.append_row, ["Date", "Section", "Daily_Output", "Weekly_Output", "Reflection"])
+
     all_values = sheet.get_all_values()
     headers = all_values[0]
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
@@ -549,11 +579,20 @@ def main():
     global_harvest_cache = {}
     deployment_cache = {} 
 
+    # --- NEW: Statistical Tracker for the Class Reflection ---
+    run_stats = {
+        "graded_today": 0,
+        "passed": 0,
+        "needs_review": 0,
+        "average_batch_score": 0,
+        "topics_assessed": set()
+    }
+
     for row_idx, row in enumerate(all_records, start=2):
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
         if not raw_comp_code: continue
         
-        # --- NEW: Fetch student profile early to access the "Subject" field from Master_Roster
+        # --- Fetch student profile early to access the "Subject" field from Master_Roster
         student_id = str(row.get("Student_ID", "")).strip()
         profile = fetch_student_from_roster(roster_data, student_id)
         
@@ -606,7 +645,6 @@ def main():
                 print(f"📅 Schedule Override: Activating {active_exam['exam_type']} for {student_id}")
                 raw_exam_code = active_exam['topic_code']
                 
-                # 🔄 UPDATED: Dynamically map the exam code based on the student's subject
                 if subject_code == "CORE_GENMATH11":
                     next_comp = f"GENMATH_{raw_exam_code}"
                 else:
@@ -676,8 +714,7 @@ def main():
         if form_gen_status == "READY":
             try_count = int(row.get("Tries", 1) or 1)
             
-            # 🚨 FIXED: Ensure subject and strand focus are part of the cache key!
-            # This prevents a TVL_SMAW student from receiving the CORE_GENMATH form generated for a STEM student.
+            # Ensure subject and strand focus are part of the cache key!
             cache_key = f"{subject_code}_{comp_code}_{strand_focus}_Try_{try_count}"
             
             vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
@@ -804,6 +841,16 @@ def main():
                 vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
                 final_feedback = format_math_text(vault_rec.get('Remediation_Scaffolding', diag_feedback)) if vault_rec else diag_feedback
 
+            # --- NEW: UPDATE STATS TRACKER FOR THE TEACHER REFLECTION ---
+            run_stats["graded_today"] += 1
+            run_stats["topics_assessed"].add(comp_code)
+            
+            # Running Average Formula
+            run_stats["average_batch_score"] = ((run_stats["average_batch_score"] * (run_stats["graded_today"] - 1)) + score) / run_stats["graded_today"]
+            
+            if status in ["Excelling", "Passing"]: run_stats["passed"] += 1
+            else: run_stats["needs_review"] += 1
+
             core_url = vault_rec.get('Core_Slides', '') if vault_rec else ""
             rem_url = vault_rec.get('Remedial_Slides', '') if vault_rec else ""
             adv_url = vault_rec.get('Advanced_Slides', '') if vault_rec else ""
@@ -833,6 +880,28 @@ def main():
             except Exception as e: print(f"Update Error: {e}")
             
             time.sleep(2)
+            
+    # --- NEW: CLASS REFLECTION ENGINE (Runs at the very end of grading) ---
+    if run_stats["graded_today"] > 0:
+        print(f"\n📊 Generating AI Class Reflection based on {run_stats['graded_today']} graded submissions...")
+        
+        # Convert set to list so it can be serialized to JSON
+        run_stats["topics_assessed"] = list(run_stats["topics_assessed"])
+        run_stats["average_batch_score"] = round(run_stats["average_batch_score"], 2)
+        
+        summary_prompt = get_class_reflection_prompt(json.dumps(run_stats, indent=2))
+        summary_data = call_gemini_with_retry(summary_prompt, ClassSummarySchema)
+        
+        if summary_data:
+            today_str = datetime.date.today().strftime("%m/%d/%Y")
+            safe_sheet_action(summary_sheet.append_row, [
+                today_str, 
+                "ALL", 
+                summary_data.daily_output, 
+                summary_data.weekly_output, 
+                summary_data.reflection
+            ])
+            print("✅ Class Summary & Reflection successfully pushed to Google Sheets!")
 
 if __name__ == '__main__':
     main()
