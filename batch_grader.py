@@ -541,6 +541,10 @@ def main():
     # 🔄 UPDATED PATHS: Pulling from the newly structured files
     with open("busmath_cur.json", "r") as f: bm_data = json.load(f)
     with open("genmath_cur.json", "r") as f: gm_data = json.load(f)
+
+    # --- NEW: Safely unpack the curriculum data if it has a top-level subject wrapper ---
+    if "ABM_BM11" in bm_data: bm_data = bm_data["ABM_BM11"]
+    if "CORE_GENMATH11" in gm_data: gm_data = gm_data["CORE_GENMATH11"]
     
     try:
         with open("contextualization_profile.json", "r") as f: context_data = json.load(f)
@@ -599,8 +603,8 @@ def main():
         if not raw_comp_code: continue
 
         # --- SELF-HEALING HOTFIX FOR CORRUPTED EXAM CODES ---
-        if "CORE_GENMATH11GENMATH_" in raw_comp_code:
-            raw_comp_code = raw_comp_code.replace("CORE_GENMATH11GENMATH_", "CORE_GENMATH11")
+        if "CORE_GENMATH11TERM1_" in raw_comp_code:
+            raw_comp_code = raw_comp_code.replace("CORE_GENMATH11TERM1_", "CORE_GENMATH11GENMATH_TERM1_")
             safe_sheet_action(sheet.update_cell, row_idx, headers.index("Topic_Focus") + 1, raw_comp_code)
             print(f"🔧 Auto-healed corrupted exam topic code for student: {row.get('Student_ID')}")
         
@@ -658,8 +662,11 @@ def main():
                 print(f"📅 Schedule Override: Activating {active_exam['exam_type']} for {student_id}")
                 raw_exam_code = active_exam['topic_code']
                 
-                # 🔄 FIXED: Removed the "GENMATH_" prefixing. Both subjects use the exact same JSON key (e.g., TERM1_SUMMATIVE_1)!
-                next_comp = raw_exam_code
+                # 🔄 RESTORED: We MUST append GENMATH_ because that is the exact key in genmath_cur.json
+                if subject_code == "CORE_GENMATH11":
+                    next_comp = f"GENMATH_{raw_exam_code}"
+                else:
+                    next_comp = raw_exam_code
                     
                 next_type = active_exam['exam_type']
                 
