@@ -597,6 +597,12 @@ def main():
     for row_idx, row in enumerate(all_records, start=2):
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
         if not raw_comp_code: continue
+
+        # --- SELF-HEALING HOTFIX FOR CORRUPTED EXAM CODES ---
+        if "CORE_GENMATH11GENMATH_" in raw_comp_code:
+            raw_comp_code = raw_comp_code.replace("CORE_GENMATH11GENMATH_", "CORE_GENMATH11")
+            safe_sheet_action(sheet.update_cell, row_idx, headers.index("Topic_Focus") + 1, raw_comp_code)
+            print(f"🔧 Auto-healed corrupted exam topic code for student: {row.get('Student_ID')}")
         
         # --- Fetch student profile early to access the "Subject" field from Master_Roster
         student_id = str(row.get("Student_ID", "")).strip()
@@ -652,10 +658,8 @@ def main():
                 print(f"📅 Schedule Override: Activating {active_exam['exam_type']} for {student_id}")
                 raw_exam_code = active_exam['topic_code']
                 
-                if subject_code == "CORE_GENMATH11":
-                    next_comp = f"GENMATH_{raw_exam_code}"
-                else:
-                    next_comp = raw_exam_code
+                # 🔄 FIXED: Removed the "GENMATH_" prefixing. Both subjects use the exact same JSON key (e.g., TERM1_SUMMATIVE_1)!
+                next_comp = raw_exam_code
                     
                 next_type = active_exam['exam_type']
                 
