@@ -538,10 +538,23 @@ def main():
     print(f"Initializing Circular Grader System (V3.4 - Contextualization Edition) [MODE: {run_mode.upper()}]...")
     sheet_client, drive_service, form_service, slides_service = get_google_services()
     
-    # 🔄 UPDATED PATHS: Pulling from the newly structured files
-    with open("busmath_cur.json", "r") as f: bm_data = json.load(f)
-    with open("genmath_cur.json", "r") as f: gm_data = json.load(f)
-
+    # 🔄 UPDATED PATHS: Bulletproof Curriculum Loading
+    bm_data, gm_data = {}, {}
+    try:
+        with open("busmath_cur.json", "r") as f: bm_data = json.load(f)
+        with open("genmath_cur.json", "r") as f: gm_data = json.load(f)
+        print("✅ Loaded separate curriculum files.")
+    except FileNotFoundError:
+        try:
+            print("⚠️ Separate files not found. Attempting to load unified curriculum_map.json...")
+            with open("curriculum_map.json", "r") as f: 
+                full_map = json.load(f)
+                bm_data = full_map.get("ABM_BM11", {})
+                gm_data = full_map.get("CORE_GENMATH11", {})
+            print("✅ Loaded unified curriculum map.")
+        except FileNotFoundError:
+            print("❌ CRITICAL ERROR: No curriculum JSON files found in the directory!")
+    
     # --- Safely unpack the curriculum data if it has a top-level subject wrapper ---
     if "ABM_BM11" in bm_data: bm_data = bm_data["ABM_BM11"]
     if "CORE_GENMATH11" in gm_data: gm_data = gm_data["CORE_GENMATH11"]
