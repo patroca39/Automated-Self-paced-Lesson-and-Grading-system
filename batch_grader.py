@@ -542,7 +542,7 @@ def main():
     with open("busmath_cur.json", "r") as f: bm_data = json.load(f)
     with open("genmath_cur.json", "r") as f: gm_data = json.load(f)
 
-    # --- NEW: Safely unpack the curriculum data if it has a top-level subject wrapper ---
+    # --- Safely unpack the curriculum data if it has a top-level subject wrapper ---
     if "ABM_BM11" in bm_data: bm_data = bm_data["ABM_BM11"]
     if "CORE_GENMATH11" in gm_data: gm_data = gm_data["CORE_GENMATH11"]
     
@@ -572,7 +572,7 @@ def main():
     log_sheet = workbook.worksheet("Performance_Logs")
     deploy_sheet = workbook.worksheet("Deployments_Library") 
 
-    # --- NEW: Safe handling for Class_Summary sheet ---
+    # --- Safe handling for Class_Summary sheet ---
     try:
         summary_sheet = workbook.worksheet("Class_Summary")
     except Exception:
@@ -593,7 +593,7 @@ def main():
     global_harvest_cache = {}
     deployment_cache = {} 
 
-    # --- UPDATED: Track Stats per Section AND for ALL ---
+    # --- Track Stats per Section AND for ALL ---
     run_stats_by_section = {
         "ALL": get_empty_stats()
     }
@@ -629,8 +629,17 @@ def main():
         
         active_curr_map = curr_maps.get(subject_code, {})
         curr = active_curr_map.get(comp_code)
-        if not curr: continue
         
+        form_gen_status = str(row.get("Form_Generation_Status", "")).strip().upper()
+        rem_status = str(row.get("Remediation_Status", "")).strip()
+        
+        # 🚨 NEW: Loud Error if Curriculum Code is missing
+        if not curr and form_gen_status in ["READY", "ADVANCE_NEXT_TOPIC", "ADVANCE_RETRY"]:
+            print(f"⚠️ Error: Topic '{comp_code}' is missing from the {subject_code} curriculum map! Skipping student {student_id}.")
+            continue
+        elif not curr:
+            continue
+            
         rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
         display_limit = rules.get("display_count", 10)
         
@@ -640,9 +649,6 @@ def main():
         student_context_profile = find_student_profile(context_data, strand_focus)
 
         # --- MODE ROUTER (GATEKEEPER) ---
-        form_gen_status = str(row.get("Form_Generation_Status", "")).strip().upper()
-        rem_status = str(row.get("Remediation_Status", "")).strip()
-
         if run_mode == "deploy" and form_gen_status not in ["ADVANCE_NEXT_TOPIC", "ADVANCE_RETRY", "READY"]:
             continue
             
@@ -681,40 +687,67 @@ def main():
                     gspread.Cell(row_idx, headers.index("Remediation") + 1, ""),
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
                 ])
-                continue
+                
+                # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
+                comp_code = next_comp
+                assessment_type = next_type
+                form_gen_status = "READY"
+                row["Tries"] = 1
+                curr = active_curr_map.get(comp_code)
+                rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
+                display_limit = rules.get("display_count", 10)
+                
+                if not curr:
+                    print(f"⚠️ Error: Exam '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
+                    continue
 
             # --- FUNCTION CALLING EXECUTION ---
-            nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, active_curr_map)
-            res = gen_client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=nav_prompt,
-                config=types.GenerateContentConfig(tools=[update_student_progress], temperature=0.2)
-            )
-            
-            if res.function_calls:
-                args = res.function_calls[0].args
-                next_comp = args.get("selected_topic_code")
-                is_course_complete = args.get("is_course_complete")
-                print(f"⏩ AI Selected Next Topic: {next_comp} | Reasoning: {args.get('reasoning')}")
-                
-                if next_comp and not is_course_complete:
-                    safe_sheet_action(sheet.update_cells, [
-                        gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"{subject_code}{next_comp}"),
-                        gspread.Cell(row_idx, headers.index("Assessment_Type") + 1, "QUIZ"),
-                        gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
-                        gspread.Cell(row_idx, headers.index("Tries") + 1, 1),
-                        gspread.Cell(row_idx, headers.index("Digital_Answers") + 1, ""),
-                        gspread.Cell(row_idx, headers.index("Score") + 1, ""),
-                        gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
-                        gspread.Cell(row_idx, headers.index("Remediation") + 1, ""),
-                        gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
-                    ])
-                else:
-                    print(f"🎓 Course Complete for Student {student_id}!")
-                    safe_sheet_action(sheet.update_cell, row_idx, headers.index("Form_Generation_Status") + 1, "COURSE_COMPLETE")
             else:
-                print("⚠️ AI Navigator failed to execute the tool.")
-            continue
+                nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, active_curr_map)
+                res = gen_client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=nav_prompt,
+                    config=types.GenerateContentConfig(tools=[update_student_progress], temperature=0.2)
+                )
+                
+                if res.function_calls:
+                    args = res.function_calls[0].args
+                    next_comp = args.get("selected_topic_code")
+                    is_course_complete = args.get("is_course_complete")
+                    print(f"⏩ AI Selected Next Topic: {next_comp} | Reasoning: {args.get('reasoning')}")
+                    
+                    if next_comp and not is_course_complete:
+                        safe_sheet_action(sheet.update_cells, [
+                            gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"{subject_code}{next_comp}"),
+                            gspread.Cell(row_idx, headers.index("Assessment_Type") + 1, "QUIZ"),
+                            gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
+                            gspread.Cell(row_idx, headers.index("Tries") + 1, 1),
+                            gspread.Cell(row_idx, headers.index("Digital_Answers") + 1, ""),
+                            gspread.Cell(row_idx, headers.index("Score") + 1, ""),
+                            gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
+                            gspread.Cell(row_idx, headers.index("Remediation") + 1, ""),
+                            gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
+                        ])
+                        
+                        # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
+                        comp_code = next_comp
+                        assessment_type = "QUIZ"
+                        form_gen_status = "READY"
+                        row["Tries"] = 1
+                        curr = active_curr_map.get(comp_code)
+                        rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
+                        display_limit = rules.get("display_count", 10)
+                        
+                        if not curr:
+                            print(f"⚠️ Error: Topic '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
+                            continue
+                    else:
+                        print(f"🎓 Course Complete for Student {student_id}!")
+                        safe_sheet_action(sheet.update_cell, row_idx, headers.index("Form_Generation_Status") + 1, "COURSE_COMPLETE")
+                        continue
+                else:
+                    print("⚠️ AI Navigator failed to execute the tool.")
+                    continue
             
         elif form_gen_status == "ADVANCE_RETRY":
             print(f"🔄 Prepping Student {row.get('Student_ID')} for Attempt #2 on {comp_code}")
@@ -726,7 +759,9 @@ def main():
                 gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
                 gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
             ])
-            continue
+            # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
+            form_gen_status = "READY"
+            row["Tries"] = 2
 
         # --- PHASE 1: GENERATION (Forms & Slides) ---
         if form_gen_status == "READY":
