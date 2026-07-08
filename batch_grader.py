@@ -628,10 +628,11 @@ def main():
         raw_subject = str(profile.get("Subject", "")).strip() if profile else ""
         raw_section = str(profile.get("Section", profile.get("Grade_Section", profile.get("Class", "Unassigned")))).strip() if profile else "Unassigned"
         
-        # Map exact spelling to internal Curriculum JSON keys
-        if raw_subject == "Gen Math":
+        # 🔄 FIXED: Robust string matching for Subject to prevent routing errors (handles "GenMath" vs "Gen Math")
+        clean_subject = raw_subject.replace(" ", "").upper()
+        if "GENMATH" in clean_subject or "GENERALMATH" in clean_subject:
             subject_code = "CORE_GENMATH11"
-        elif raw_subject == "Business Math":
+        elif "BUSMATH" in clean_subject or "BUSINESSMATH" in clean_subject:
             subject_code = "ABM_BM11"
         else:
             # Fallback for old/legacy rows
@@ -752,6 +753,42 @@ def main():
                         display_limit = rules.get("display_count", 10)
                         
                         if not curr:
+                            print(f"⚠️ Error: Exam '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
+                            continue
+
+            # --- STRUCTURED JSON EXECUTION (Replaces flaky Function Calling) ---
+            else:
+                nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, active_curr_map)
+                nav_decision = call_gemini_with_retry(nav_prompt, NextTopicSchema)
+                
+                if nav_decision:
+                    next_comp = nav_decision.selected_topic_code
+                    is_course_complete = nav_decision.is_course_complete
+                    print(f"⏩ AI Selected Next Topic: {next_comp} | Reasoning: {nav_decision.reasoning}")
+                    
+                    if next_comp and not is_course_complete:
+                        safe_sheet_action(sheet.update_cells, [
+                            gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"{subject_code}{next_comp}"),
+                            gspread.Cell(row_idx, headers.index("Assessment_Type") + 1, "QUIZ"),
+                            gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
+                            gspread.Cell(row_idx, headers.index("Tries") + 1, 1),
+                            gspread.Cell(row_idx, headers.index("Digital_Answers") + 1, ""),
+                            gspread.Cell(row_idx, headers.index("Score") + 1, ""),
+                            gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
+                            gspread.Cell(row_idx, headers.index("Remediation") + 1, ""),
+                            gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
+                        ])
+                        
+                        # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
+                        comp_code = next_comp
+                        assessment_type = "QUIZ"
+                        form_gen_status = "READY"
+                        row["Tries"] = 1
+                        curr = active_curr_map.get(comp_code)
+                        rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
+                        display_limit = rules.get("display_count", 10)
+                        
+                        if not curr:
                             print(f"⚠️ Error: Topic '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
                             continue
                     else:
@@ -759,7 +796,7 @@ def main():
                         safe_sheet_action(sheet.update_cell, row_idx, headers.index("Form_Generation_Status") + 1, "COURSE_COMPLETE")
                         continue
                 else:
-                    print("⚠️ AI Navigator failed to execute the tool.")
+                    print("⚠️ AI Navigator failed to generate structured JSON. Skipping.")
                     continue
             
         elif form_gen_status == "ADVANCE_RETRY":
