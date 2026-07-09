@@ -78,18 +78,16 @@ class LessonContentSchema(BaseModel):
 class QuizSchema(BaseModel):
     quiz: list[MCQ]
 
-# --- NEW: CLASS REFLECTION SCHEMA ---
 class ClassSummarySchema(BaseModel):
     daily_output: str
     weekly_output: str
     reflection: str
 
-# --- AI NAVIGATOR TOOL ---
-def update_student_progress(selected_topic_code: str, reasoning: str, is_course_complete: bool):
-    """
-    Updates the student's progress in the database based on their assessment score.
-    """
-    pass
+# --- NEW: AI NAVIGATOR SCHEMA ---
+class NextTopicSchema(BaseModel):
+    selected_topic_code: str
+    reasoning: str
+    is_course_complete: bool
 
 # --- GOOGLE AUTHENTICATION ---
 def get_google_services():
@@ -329,7 +327,7 @@ def get_navigator_prompt(student_id, recent_score, current_topic, curr_data):
     2. If the score is incredibly high (>= 95%), check if they can skip a basic topic and go straight to an advanced one.
     3. If there are no more topics left to take, set 'is_course_complete' to true.
     
-    Use the `update_student_progress` tool to enact your decision.
+    Use the schema to output your decision.
     """
 
 # --- UPDATED: CLASS REFLECTION PROMPT ENGINE ---
@@ -714,47 +712,6 @@ def main():
                 if not curr:
                     print(f"⚠️ Error: Exam '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
                     continue
-
-            # --- FUNCTION CALLING EXECUTION ---
-            else:
-                nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, active_curr_map)
-                res = gen_client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=nav_prompt,
-                    config=types.GenerateContentConfig(tools=[update_student_progress], temperature=0.2)
-                )
-                
-                if res.function_calls:
-                    args = res.function_calls[0].args
-                    next_comp = args.get("selected_topic_code")
-                    is_course_complete = args.get("is_course_complete")
-                    print(f"⏩ AI Selected Next Topic: {next_comp} | Reasoning: {args.get('reasoning')}")
-                    
-                    if next_comp and not is_course_complete:
-                        safe_sheet_action(sheet.update_cells, [
-                            gspread.Cell(row_idx, headers.index("Topic_Focus") + 1, f"{subject_code}{next_comp}"),
-                            gspread.Cell(row_idx, headers.index("Assessment_Type") + 1, "QUIZ"),
-                            gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
-                            gspread.Cell(row_idx, headers.index("Tries") + 1, 1),
-                            gspread.Cell(row_idx, headers.index("Digital_Answers") + 1, ""),
-                            gspread.Cell(row_idx, headers.index("Score") + 1, ""),
-                            gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
-                            gspread.Cell(row_idx, headers.index("Remediation") + 1, ""),
-                            gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
-                        ])
-                        
-                        # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
-                        comp_code = next_comp
-                        assessment_type = "QUIZ"
-                        form_gen_status = "READY"
-                        row["Tries"] = 1
-                        curr = active_curr_map.get(comp_code)
-                        rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
-                        display_limit = rules.get("display_count", 10)
-                        
-                        if not curr:
-                            print(f"⚠️ Error: Exam '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
-                            continue
 
             # --- STRUCTURED JSON EXECUTION (Replaces flaky Function Calling) ---
             else:
