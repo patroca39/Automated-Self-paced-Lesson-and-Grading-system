@@ -25,8 +25,8 @@ ASSESSMENT_RULES = {
 
 # --- TIME-GATED EXAM SCHEDULE (From DepEd Memo No. 001, s 2026) ---
 EXAM_SCHEDULE = [
-    # Term 1
-    {"start": "2026-07-06", "end": "2026-07-07", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM1_SUMMATIVE_1"},
+    # Term 1 - 🔄 UPDATED: Extended end date to allow current batch to take the exam
+    {"start": "2026-07-06", "end": "2026-07-14", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM1_SUMMATIVE_1"},
     {"start": "2026-07-28", "end": "2026-07-29", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM1_SUMMATIVE_2"},
     {"start": "2026-08-28", "end": "2026-09-02", "exam_type": "TERM_EXAM", "topic_code": "TERM1_FINAL_EXAM"},
     # Term 2
