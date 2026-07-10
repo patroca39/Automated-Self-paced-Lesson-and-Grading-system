@@ -308,7 +308,7 @@ def get_quiz_prompt(curr, strand_focus, missing_count, context_profile, tos_rule
     🛑 CRITICAL INSTRUCTION: For 'correct_answer', output ONLY the single uppercase letter (A, B, C, or D). Do not write the full answer text!
     """
 
-def get_navigator_prompt(student_id, recent_score, current_topic, curr_data):
+def get_navigator_prompt(student_id, recent_score, current_topic, curr_data, student_history):
     map_context = json.dumps(curr_data, indent=2)
     return f"""
     You are an automated Curriculum Navigator for a Senior High School class.
@@ -317,15 +317,17 @@ def get_navigator_prompt(student_id, recent_score, current_topic, curr_data):
     - Student ID: {student_id}
     - Just completed topic: {current_topic}
     - Score on that topic: {recent_score}%
+    - PREVIOUSLY COMPLETED TOPICS: {', '.join(student_history)}
     
     CURRICULUM MAP:
     {map_context}
     
     YOUR MISSION:
-    Look at the curriculum map and the student's score. 
-    1. If the score is >= 75%, select the next logical topic based on the 'prerequisites' and 'difficulty_level'.
+    Look at the curriculum map, the student's score, and their previously completed topics. 
+    1. If the score is >= 75%, select the next logical topic based on the 'prerequisites' and 'difficulty_level'. Make sure it is NOT in their previously completed topics list.
     2. If the score is incredibly high (>= 95%), check if they can skip a basic topic and go straight to an advanced one.
-    3. If there are no more topics left to take, set 'is_course_complete' to true.
+    3. If they just finished a Summative Test out of order, look at their "PREVIOUSLY COMPLETED TOPICS" to see where they left off in the regular lessons, and assign them the next new lesson.
+    4. If there are no more topics left to take, set 'is_course_complete' to true.
     
     Use the schema to output your decision.
     """
@@ -599,6 +601,7 @@ def main():
     vault_data = vault_sheet.get_all_records()
     roster_data = roster_sheet.get_all_records()
     deploy_data = deploy_sheet.get_all_records()
+    log_data = log_sheet.get_all_values() # 👈 Load logs to memory
     print("✅ Databases loaded successfully. Read requests drop to 0 during loop!")
 
     global_harvest_cache = {}
@@ -672,9 +675,24 @@ def main():
             recent_score = row.get("Score", 0)
             print(f"🧠 AI Navigator analyzing progression for Student {student_id} (Last Score: {recent_score}%)...")
             
+            # Fetch student's historical topics to prevent backwards looping
+            student_history = [str(r[2]).strip() for r in log_data[1:] if str(r[1]).strip() == student_id]
+            
             # --- SCHEDULE INTERCEPTOR ---
             active_exam = get_active_scheduled_exam()
             is_course_complete = False
+            
+            # 🛡️ HISTORICAL SAFETY CHECK
+            if active_exam:
+                raw_exam_code = active_exam['topic_code']
+                if subject_code == "CORE_GENMATH11":
+                    next_comp_check = f"GENMATH_{raw_exam_code}"
+                else:
+                    next_comp_check = raw_exam_code
+                    
+                if next_comp_check in student_history:
+                    print(f"🛡️ Safety Check: Student {student_id} already took {next_comp_check}. Bypassing schedule interceptor.")
+                    active_exam = None
             
             if active_exam:
                 print(f"📅 Schedule Override: Activating {active_exam['exam_type']} for {student_id}")
@@ -715,7 +733,7 @@ def main():
 
             # --- STRUCTURED JSON EXECUTION (Replaces flaky Function Calling) ---
             else:
-                nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, active_curr_map)
+                nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, active_curr_map, student_history)
                 nav_decision = call_gemini_with_retry(nav_prompt, NextTopicSchema)
                 
                 if nav_decision:
