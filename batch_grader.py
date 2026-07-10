@@ -83,7 +83,7 @@ class ClassSummarySchema(BaseModel):
     weekly_output: str
     reflection: str
 
-# --- NEW: AI NAVIGATOR SCHEMA ---
+# --- AI NAVIGATOR SCHEMA ---
 class NextTopicSchema(BaseModel):
     selected_topic_code: str
     reasoning: str
@@ -113,12 +113,9 @@ def safe_sheet_action(action_func, *args, **kwargs):
 
 # --- CONTEXTUAL PROFILE FETCHER ---
 def find_student_profile(context_data, target_specialization):
-    """Recursively searches the nested JSON to find the student's specific TVL or Academic track profile."""
     if target_specialization == "DEFAULT": return context_data.get("DEFAULT", {})
     
     target = str(target_specialization).upper()
-    
-    # Robust Aliases to catch spreadsheet typing variations (e.g. "Kitchen Operation" -> "COOKERY")
     aliases = {
         "KITCHEN": "COOKERY", "CULINARY": "COOKERY", 
         "SMAW": "SMAW", "WELDING": "SMAW", 
@@ -332,7 +329,7 @@ def get_navigator_prompt(student_id, recent_score, current_topic, curr_data, stu
     Use the schema to output your decision.
     """
 
-# --- UPDATED: CLASS REFLECTION PROMPT ENGINE ---
+# --- CLASS REFLECTION PROMPT ENGINE ---
 def get_class_reflection_prompt(stats_data, section_name):
     target_context = "the entire school across all sections" if section_name == "ALL" else f"the specific class section '{section_name}'"
     return f"""
@@ -535,10 +532,9 @@ def main():
     args = parser.parse_args()
     run_mode = args.mode
 
-    print(f"Initializing Circular Grader System (V3.4 - Contextualization Edition) [MODE: {run_mode.upper()}]...")
+    print(f"Initializing Circular Grader System (V3.5 - In-App Assessment Edition) [MODE: {run_mode.upper()}]...")
     sheet_client, drive_service, form_service, slides_service = get_google_services()
     
-    # 🔄 UPDATED PATHS: Bulletproof Curriculum Loading
     bm_data, gm_data = {}, {}
     try:
         with open("busmath_cur.json", "r") as f: bm_data = json.load(f)
@@ -555,7 +551,6 @@ def main():
         except FileNotFoundError:
             print("❌ CRITICAL ERROR: No curriculum JSON files found in the directory!")
     
-    # --- Safely unpack the curriculum data if it has a top-level subject wrapper ---
     if "ABM_BM11" in bm_data: bm_data = bm_data["ABM_BM11"]
     if "CORE_GENMATH11" in gm_data: gm_data = gm_data["CORE_GENMATH11"]
     
@@ -564,7 +559,6 @@ def main():
     except FileNotFoundError:
         context_data = {"DEFAULT": {"description": "", "teaching_strategy": "", "real_world_context": ""}}
     
-    # Map the Subject_Code to the correct curriculum file
     curr_maps = {
         "ABM_BM11": bm_data,
         "CORE_GENMATH11": gm_data
@@ -585,13 +579,22 @@ def main():
     log_sheet = workbook.worksheet("Performance_Logs")
     deploy_sheet = workbook.worksheet("Deployments_Library") 
 
-    # --- Safe handling for Class_Summary sheet ---
     try:
         summary_sheet = workbook.worksheet("Class_Summary")
     except Exception:
         print("Creating missing Class_Summary worksheet...")
         summary_sheet = workbook.add_worksheet(title="Class_Summary", rows="100", cols="5")
         safe_sheet_action(summary_sheet.append_row, ["Date", "Section", "Daily_Output", "Weekly_Output", "Reflection"])
+        
+    # --- 🚀 NEW: Load Submissions Sheet (In-App Assessments) ---
+    try:
+        submissions_sheet = workbook.worksheet("Submissions")
+    except Exception:
+        print("Creating missing Submissions worksheet...")
+        submissions_sheet = workbook.add_worksheet(title="Submissions", rows="1000", cols="5")
+        safe_sheet_action(submissions_sheet.append_row, ["Timestamp", "LRN", "Answers", "Infractions", "Status"])
+        
+    submissions_data = submissions_sheet.get_all_values()
 
     all_values = sheet.get_all_values()
     headers = all_values[0]
@@ -601,13 +604,12 @@ def main():
     vault_data = vault_sheet.get_all_records()
     roster_data = roster_sheet.get_all_records()
     deploy_data = deploy_sheet.get_all_records()
-    log_data = log_sheet.get_all_values() # 👈 Load logs to memory
+    log_data = log_sheet.get_all_values() 
     print("✅ Databases loaded successfully. Read requests drop to 0 during loop!")
 
     global_harvest_cache = {}
     deployment_cache = {} 
 
-    # --- Track Stats per Section AND for ALL ---
     run_stats_by_section = {
         "ALL": get_empty_stats()
     }
@@ -616,27 +618,22 @@ def main():
         raw_comp_code = str(row.get("Topic_Focus", "")).strip()
         if not raw_comp_code: continue
 
-        # --- SELF-HEALING HOTFIX FOR CORRUPTED EXAM CODES ---
         if "CORE_GENMATH11TERM1_" in raw_comp_code:
             raw_comp_code = raw_comp_code.replace("CORE_GENMATH11TERM1_", "CORE_GENMATH11GENMATH_TERM1_")
             safe_sheet_action(sheet.update_cell, row_idx, headers.index("Topic_Focus") + 1, raw_comp_code)
-            print(f"🔧 Auto-healed corrupted exam topic code for student: {row.get('Student_ID')}")
         
-        # --- Fetch student profile early to access the "Subject" field from Master_Roster
         student_id = str(row.get("Student_ID", "")).strip()
         profile = fetch_student_from_roster(roster_data, student_id)
         
         raw_subject = str(profile.get("Subject", "")).strip() if profile else ""
         raw_section = str(profile.get("Section", profile.get("Grade_Section", profile.get("Class", "Unassigned")))).strip() if profile else "Unassigned"
         
-        # 🔄 FIXED: Robust string matching for Subject to prevent routing errors (handles "GenMath" vs "Gen Math")
         clean_subject = raw_subject.replace(" ", "").upper()
         if "GENMATH" in clean_subject or "GENERALMATH" in clean_subject:
             subject_code = "CORE_GENMATH11"
         elif "BUSMATH" in clean_subject or "BUSINESSMATH" in clean_subject:
             subject_code = "ABM_BM11"
         else:
-            # Fallback for old/legacy rows
             subject_code = str(row.get("Subject_Code", "ABM_BM11")).strip()
             
         comp_code = raw_comp_code.replace(subject_code, "") 
@@ -648,7 +645,6 @@ def main():
         form_gen_status = str(row.get("Form_Generation_Status", "")).strip().upper()
         rem_status = str(row.get("Remediation_Status", "")).strip()
         
-        # 🚨 NEW: Loud Error if Curriculum Code is missing
         if not curr and form_gen_status in ["READY", "ADVANCE_NEXT_TOPIC", "ADVANCE_RETRY"]:
             print(f"⚠️ Error: Topic '{comp_code}' is missing from the {subject_code} curriculum map! Skipping student {student_id}.")
             continue
@@ -658,7 +654,6 @@ def main():
         rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
         display_limit = rules.get("display_count", 10)
         
-        # Pull Strand_Focus directly from Master Roster for accurate context
         raw_strand = str(profile.get("Strand_Focus", profile.get("Strand", profile.get("Specialization", row.get("Strand_Focus", "ABM"))))) if profile else row.get("Strand_Focus", "ABM")
         strand_focus = raw_strand.strip().upper()
         student_context_profile = find_student_profile(context_data, strand_focus)
@@ -675,14 +670,10 @@ def main():
             recent_score = row.get("Score", 0)
             print(f"🧠 AI Navigator analyzing progression for Student {student_id} (Last Score: {recent_score}%)...")
             
-            # Fetch student's historical topics to prevent backwards looping
             student_history = [str(r[2]).strip() for r in log_data[1:] if str(r[1]).strip() == student_id]
-            
-            # --- SCHEDULE INTERCEPTOR ---
             active_exam = get_active_scheduled_exam()
             is_course_complete = False
             
-            # 🛡️ HISTORICAL SAFETY CHECK
             if active_exam:
                 raw_exam_code = active_exam['topic_code']
                 if subject_code == "CORE_GENMATH11":
@@ -691,14 +682,12 @@ def main():
                     next_comp_check = raw_exam_code
                     
                 if next_comp_check in student_history:
-                    print(f"🛡️ Safety Check: Student {student_id} already took {next_comp_check}. Bypassing schedule interceptor.")
                     active_exam = None
             
             if active_exam:
                 print(f"📅 Schedule Override: Activating {active_exam['exam_type']} for {student_id}")
                 raw_exam_code = active_exam['topic_code']
                 
-                # 🔄 RESTORED: We MUST append GENMATH_ because that is the exact key in genmath_cur.json
                 if subject_code == "CORE_GENMATH11":
                     next_comp = f"GENMATH_{raw_exam_code}"
                 else:
@@ -718,7 +707,6 @@ def main():
                     gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
                 ])
                 
-                # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
                 comp_code = next_comp
                 assessment_type = next_type
                 form_gen_status = "READY"
@@ -731,7 +719,6 @@ def main():
                     print(f"⚠️ Error: Exam '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
                     continue
 
-            # --- STRUCTURED JSON EXECUTION (Replaces flaky Function Calling) ---
             else:
                 nav_prompt = get_navigator_prompt(student_id, recent_score, comp_code, active_curr_map, student_history)
                 nav_decision = call_gemini_with_retry(nav_prompt, NextTopicSchema)
@@ -739,7 +726,6 @@ def main():
                 if nav_decision:
                     next_comp = nav_decision.selected_topic_code
                     is_course_complete = nav_decision.is_course_complete
-                    print(f"⏩ AI Selected Next Topic: {next_comp} | Reasoning: {nav_decision.reasoning}")
                     
                     if next_comp and not is_course_complete:
                         safe_sheet_action(sheet.update_cells, [
@@ -754,7 +740,6 @@ def main():
                             gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
                         ])
                         
-                        # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
                         comp_code = next_comp
                         assessment_type = "QUIZ"
                         form_gen_status = "READY"
@@ -763,16 +748,11 @@ def main():
                         rules = ASSESSMENT_RULES.get(assessment_type, ASSESSMENT_RULES["QUIZ"])
                         display_limit = rules.get("display_count", 10)
                         
-                        if not curr:
-                            print(f"⚠️ Error: Topic '{comp_code}' is missing from {subject_code} curriculum map! Skipping form build.")
-                            continue
+                        if not curr: continue
                     else:
-                        print(f"🎓 Course Complete for Student {student_id}!")
                         safe_sheet_action(sheet.update_cell, row_idx, headers.index("Form_Generation_Status") + 1, "COURSE_COMPLETE")
                         continue
-                else:
-                    print("⚠️ AI Navigator failed to generate structured JSON. Skipping.")
-                    continue
+                else: continue
             
         elif form_gen_status == "ADVANCE_RETRY":
             print(f"🔄 Prepping Student {row.get('Student_ID')} for Attempt #2 on {comp_code}")
@@ -784,15 +764,12 @@ def main():
                 gspread.Cell(row_idx, headers.index("Remediation_Status") + 1, "Pending"),
                 gspread.Cell(row_idx, headers.index("Form_URL") + 1, "")
             ])
-            # --- 🔥 INSTANT FALLTHROUGH LOGIC ---
             form_gen_status = "READY"
             row["Tries"] = 2
 
         # --- PHASE 1: GENERATION (Forms & Slides) ---
         if form_gen_status == "READY":
             try_count = int(row.get("Tries", 1) or 1)
-            
-            # Ensure subject and strand focus are part of the cache key!
             cache_key = f"{subject_code}_{comp_code}_{strand_focus}_Try_{try_count}"
             
             vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
@@ -849,7 +826,6 @@ def main():
                 else: final_form_quiz = combined_quiz[:display_limit]
 
                 if not final_form_quiz:
-                    print(f"❌ ERROR: Quiz data is empty for {comp_code}. Gemini likely failed to generate. Skipping deployment.")
                     sheet.update_cell(row_idx, headers.index("Form_Generation_Status") + 1, "GEMINI_ERROR")
                     continue
 
@@ -857,7 +833,6 @@ def main():
                     form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
                     deployment_cache[cache_key] = form_url
                     save_to_deployments(deploy_sheet, deploy_data, comp_code, strand_focus, try_count, form_url, core_url, rem_url, adv_url)
-                    print(f"✅ Form Natively Generated and Deployed for {comp_code}. Saved to Library.")
                 except Exception as e: print(f"Form Gen Error: {e}")
 
             try:
@@ -872,7 +847,6 @@ def main():
                 if "Advanced_Slides" in headers and adv_url: update_payload.append(gspread.Cell(row_idx, headers.index("Advanced_Slides") + 1, adv_url))
 
                 safe_sheet_action(sheet.update_cells, update_payload)
-                print(f"✅ Handing off {comp_code} to n8n for email distribution.")
             except Exception as e: print(f"Payload Update Error: {e}")
             
             time.sleep(2)
@@ -885,13 +859,36 @@ def main():
                 
             digital_answers = str(row.get("Digital_Answers", "")).strip()
             
-            if not digital_answers and form_url:
-                if form_url not in global_harvest_cache:
-                    global_harvest_cache[form_url] = harvest_responses(form_service, form_url)
-                
-                if student_id in global_harvest_cache[form_url]:
-                    digital_answers = global_harvest_cache[form_url][student_id]
+            # --- 🚀 NEW: IN-APP ASSESSMENT INTERCEPTOR ---
+            in_app_sub = None
+            for sub_idx, sub_row in enumerate(submissions_data[1:], start=2):
+                if len(sub_row) >= 5 and str(sub_row[1]).strip() == student_id and str(sub_row[4]).strip() == "Pending Grading":
+                    in_app_sub = {"row_idx": sub_idx, "answers": sub_row[2], "infractions": int(sub_row[3]) if str(sub_row[3]).isdigit() else 0}
+                    break
+
+            if in_app_sub:
+                print(f"📥 Intercepted In-App Submission for {student_id}! Extracting payload...")
+                try:
+                    raw_answers = json.loads(in_app_sub["answers"])
+                    idx_to_letter = {0: 'A', 1: 'B', 2: 'C', 3: 'D'}
+                    
+                    # Convert dict values (0,1,2,3) to string (A,B,C,D)
+                    choices = [idx_to_letter.get(int(v), "MISSING") for k, v in raw_answers.items()]
+                    digital_answers = ", ".join(choices)
+                    
                     safe_sheet_action(sheet.update_cell, row_idx, headers.index("Digital_Answers") + 1, digital_answers)
+                    safe_sheet_action(submissions_sheet.update_cell, in_app_sub["row_idx"], 5, "Graded")
+                except Exception as e:
+                    print(f"Error parsing In-App answers: {e}")
+            else:
+                # --- FALLBACK: STANDARD GOOGLE FORMS HARVESTER ---
+                if not digital_answers and form_url:
+                    if form_url not in global_harvest_cache:
+                        global_harvest_cache[form_url] = harvest_responses(form_service, form_url)
+                    
+                    if student_id in global_harvest_cache[form_url]:
+                        digital_answers = global_harvest_cache[form_url][student_id]
+                        safe_sheet_action(sheet.update_cell, row_idx, headers.index("Digital_Answers") + 1, digital_answers)
 
             if not digital_answers: continue
 
@@ -919,15 +916,20 @@ def main():
                 vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
                 final_feedback = format_math_text(vault_rec.get('Remediation_Scaffolding', diag_feedback)) if vault_rec else diag_feedback
 
-            # --- UPDATED: AGGREGATE STATS TRACKER PER SECTION & FOR 'ALL' ---
+            # --- 🚀 NEW: APPEND PROCTORING INFRACTIONS TO FEEDBACK ---
+            if in_app_sub and in_app_sub["infractions"] > 0:
+                inf_count = in_app_sub["infractions"]
+                if inf_count >= 3:
+                    final_feedback = f"🚨 PROCTOR WARNING: Exam auto-terminated due to maximum cheating infractions ({inf_count} strikes). Screen focus and eye-tracking anomalies logged.\n\n" + final_feedback
+                else:
+                    final_feedback = f"⚠️ PROCTOR NOTE: {inf_count} minor infraction(s) logged (looking away/tab switching).\n\n" + final_feedback
+
             if raw_section not in run_stats_by_section:
                 run_stats_by_section[raw_section] = get_empty_stats()
             
-            # Helper to update a specific stats dictionary
             def update_stats(stats_dict):
                 stats_dict["graded_today"] += 1
                 stats_dict["topics_assessed"].add(comp_code)
-                # Running Average Formula
                 stats_dict["average_batch_score"] = ((stats_dict["average_batch_score"] * (stats_dict["graded_today"] - 1)) + score) / stats_dict["graded_today"]
                 if status in ["Excelling", "Passing"]: 
                     stats_dict["passed"] += 1
@@ -967,14 +969,12 @@ def main():
             
             time.sleep(2)
             
-    # --- UPDATED: CLASS REFLECTION ENGINE (Runs for ALL and Each Specific Section) ---
     today_str = datetime.date.today().strftime("%m/%d/%Y")
     
     for section_name, stats in run_stats_by_section.items():
         if stats["graded_today"] > 0:
             print(f"\n📊 Generating AI Class Reflection for {section_name} based on {stats['graded_today']} graded submissions...")
             
-            # Convert set to list so it can be serialized to JSON
             stats["topics_assessed"] = list(stats["topics_assessed"])
             stats["average_batch_score"] = round(stats["average_batch_score"], 2)
             
