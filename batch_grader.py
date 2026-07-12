@@ -16,37 +16,29 @@ from google.genai import types
 # --- CONFIGURATION ---
 gen_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# Matched exactly to DepEd SHS Memorandum No. 001, s. 2026 constraints
+# Matched exactly to DepEd SHS Memorandum No. 001, s. 2026
 ASSESSMENT_RULES = {
     "QUIZ": {"target_count": 20, "display_count": 10, "has_lecture": True},
     "SUMMATIVE_TEST": {"target_count": 40, "display_count": 30, "has_lecture": False}, 
     "TERM_EXAM": {"target_count": 80, "display_count": 60, "has_lecture": False, "hard_mode": True} 
 }
 
-# --- TIME-GATED EXAM SCHEDULE (From DepEd Memo No. 001, s 2026) ---
+# --- TIME-GATED EXAM SCHEDULE ---
 EXAM_SCHEDULE = [
-    # Term 1 
     {"start": "2026-07-06", "end": "2026-07-14", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM1_SUMMATIVE_1"},
     {"start": "2026-07-28", "end": "2026-07-29", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM1_SUMMATIVE_2"},
-    {"start": "2026-08-28", "end": "2026-09-02", "exam_type": "TERM_EXAM", "topic_code": "TERM1_FINAL_EXAM"},
-    # Term 2
-    {"start": "2026-10-07", "end": "2026-10-08", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM2_SUMMATIVE_1"},
-    {"start": "2026-10-29", "end": "2026-10-30", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM2_SUMMATIVE_2"},
-    {"start": "2026-12-03", "end": "2026-12-04", "exam_type": "TERM_EXAM", "topic_code": "TERM2_FINAL_EXAM"},
-    # Term 3
-    {"start": "2027-01-25", "end": "2027-01-26", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM3_SUMMATIVE_1"},
-    {"start": "2027-02-26", "end": "2027-02-27", "exam_type": "SUMMATIVE_TEST", "topic_code": "TERM3_SUMMATIVE_2"},
-    {"start": "2027-03-22", "end": "2027-03-24", "exam_type": "TERM_EXAM", "topic_code": "TERM3_FINAL_EXAM"}
+    {"start": "2026-08-28", "end": "2026-09-02", "exam_type": "TERM_EXAM", "topic_code": "TERM1_FINAL_EXAM"}
 ]
 
 def get_active_scheduled_exam():
+    """Checks if today falls within a mandated examination window."""
     today = datetime.date.today().isoformat()
     for exam in EXAM_SCHEDULE:
         if exam["start"] <= today <= exam["end"]:
             return exam
     return None
 
-# --- DIAGNOSTIC SCHEMAS ---
+# --- DIAGNOSTIC SCHEMAS (INCLUDES SLIDES) ---
 class MCQ(BaseModel):
     sub_concept: str          
     question: str
@@ -98,6 +90,7 @@ def get_google_services():
         build('slides', 'v1', credentials=creds)
     )
 
+# --- THE 429 QUOTA FIX: SAFE RETRY WRAPPER ---
 def safe_sheet_action(action_func, *args, **kwargs):
     for attempt in range(4):
         try:
@@ -108,6 +101,7 @@ def safe_sheet_action(action_func, *args, **kwargs):
     print("❌ CRITICAL: Google Sheets API failed after 4 retries.")
     return None
 
+# --- CONTEXTUAL PROFILE FETCHER ---
 def find_student_profile(context_data, target_specialization):
     if target_specialization == "DEFAULT": return context_data.get("DEFAULT", {})
     target = str(target_specialization).upper()
@@ -137,9 +131,11 @@ def find_student_profile(context_data, target_specialization):
     if result: return result
     return context_data.get("DEFAULT", {})
 
+# --- MEMORY CACHE FUNCTIONS ---
 def fetch_student_from_roster(roster_data, student_id):
     for r in roster_data:
-        if str(r.get('Student_ID', '')).strip() == str(student_id).strip(): return r
+        if str(r.get('Student_ID', '')).strip() == str(student_id).strip():
+            return r
     return None
 
 def fetch_from_vault(vault_data, comp_code, strand_focus):
@@ -198,6 +194,7 @@ def save_master_lesson(vault_sheet, vault_data, comp_code, strand_focus, lesson_
         lesson_data.enrichment_scenario, core_url, rem_url, adv_url
     ]
     safe_sheet_action(vault_sheet.append_row, new_row)
+    
     vault_data.append({
         "Topic_Focus": comp_code, "Strand_Focus": strand_focus, "Lesson_Title": lesson_data.lesson_title,
         "Lecture_Content": format_math_text(lesson_data.lecture_content), "Remediation_Scaffolding": format_math_text(lesson_data.remediation_scaffolding),
@@ -211,11 +208,15 @@ def append_to_performance_log(log_sheet, student_id, comp_code, score, feedback)
     except Exception as e:
         print(f"⚠️ Failed to write to Performance Log: {e}")
 
-# 🛠️ FIXED: Removed aggressive formatting scrubbers. Now supports Markdown & KaTeX natively!
+# --- RESTORED: Strict Scrubber for Google Forms Compatibility ---
 def format_math_text(text):
     if not text: return ""
-    # Safely convert generic newlines, but preserve ALL Markdown and LaTeX markers
-    text = str(text).replace('[NEWLINE]', '\n\n').replace('<br>', '\n')
+    text = str(text).replace('<br>', '\n').replace('<li>', '\n• ').replace('</p>', '\n\n')
+    text = text.replace('<ul>', '').replace('</ul>', '').replace('<ol>', '').replace('</ol>', '')
+    text = re.sub(r'<[^>]+>', '', text).replace('**', '').replace('*', '')
+    text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
+    replacements = {"\\times": "×", "\\div": "÷", "\\pm": "±", "\\^2": "²", "$": "", "\\": "", "[NEWLINE]": "\n"}
+    for old, new in replacements.items(): text = text.replace(old, new)
     return text.strip()
 
 def call_gemini_with_retry(contents, schema_class, retries=4):
@@ -245,7 +246,7 @@ def call_gemini_with_retry(contents, schema_class, retries=4):
                 time.sleep(35)
     return None
 
-# --- UPGRADED PROMPT ENGINES (Embracing ReactMarkdown & Dynamic AI Images) ---
+# --- PROMPT ENGINES ---
 def get_lecture_prompt(curr, strand_focus, context_profile):
     return f"""
     You are an expert master teacher for the {strand_focus} track.
@@ -253,26 +254,23 @@ def get_lecture_prompt(curr, strand_focus, context_profile):
     Content Domain: {curr.get('content', 'Mathematics')}
     Learning Competency: {curr.get('learning_competency', '')}
     
-    🛑 CONTEXTUALIZATION RULES (CRITICAL):
+    🛑 CONTEXTUALIZATION RULES:
     Target Audience: {context_profile.get('description', '')}
     Teaching Strategy: {context_profile.get('teaching_strategy', '')}
     Real-World Context: ALL examples, scenarios, and word problems MUST utilize: {context_profile.get('real_world_context', '')}.
     
-    🛑 FRONTEND COMPATIBILITY RULES (CRITICAL): 
-    - You are writing for a modern React frontend equipped with ReactMarkdown, remark-gfm, and KaTeX.
-    - USE RICH MARKDOWN: Use **bolding**, *italics*, and `code blocks` to make the text engaging.
-    - USE MARKDOWN TABLES: Use standard | column | tables | to organize financial data, comparisons, or schedules.
-    - USE LATEX FOR ALL MATH: You MUST use standard LaTeX syntax for all formulas, fractions, and numbers. Wrap inline math in single $...$ and block equations in double $$...$$. Example: $A = P(1 + \\frac{{r}}{{n}})^{nt}$
-    - DYNAMIC AI IMAGES: Whenever introducing a real-world scenario, you MUST dynamically generate a contextual image using this exact markdown format: 
-      ![Image Alt Text](https://image.pollinations.ai/prompt/describe%20the%20scene%20in%20detail%20highly%20cinematic?width=800&height=400&nologo=true) 
-      (Ensure you replace all spaces in the URL prompt with %20).
-    - ESCAPE JSON: Ensure your LaTeX backslashes are properly escaped in the JSON string output (e.g., \\\\frac).
+    🛑 FORMATTING RULES (CRITICAL FOR GOOGLE FORMS): 
+    - NO RAW LATEX ALLOWED. Do NOT use $.
+    - USE UNICODE MATH TYPOGRAPHY: Make it look like a math textbook using unicode characters.
+    - ABSOLUTELY NO HTML TAGS. Do NOT use <br>, <b>, <i>, <ul>, <li>, <sup>, or <sub>. 
+    - Because JSON strips invisible return keys, you MUST use the exact placeholder [NEWLINE] wherever you want a line break or paragraph break. 
     
     🛑 SLIDE RULES: Provide 3-5 slides per tier. Keep bullet points concise and impactful.
     """
 
 def get_quiz_prompt(curr, strand_focus, missing_count, context_profile, tos_rules=None, hard_mode=False):
     difficulty_context = "CRITICAL THINKING & ADVANCED ANALYSIS ONLY." if hard_mode else "Standard high school difficulty."
+    base_prompt = "🛑 CRITICAL MATH FORMATTING RULES: NO RAW LATEX ALLOWED. Do NOT use $. USE UNICODE MATH TYPOGRAPHY. Write fractions cleanly as plain text: a/b."
     
     tos_context = ""
     if tos_rules and "DepEd_TOS_Distribution" in tos_rules:
@@ -289,14 +287,9 @@ def get_quiz_prompt(curr, strand_focus, missing_count, context_profile, tos_rule
     Real-World Context: Frame the math word problems using scenarios related to: {context_profile.get('real_world_context', '')}. Make it highly relevant to their track!
     
     {tos_context}
-    
-    🛑 FRONTEND COMPATIBILITY RULES (CRITICAL):
-    - USE LATEX FOR ALL MATH: You MUST use standard LaTeX syntax for all formulas, fractions, and numbers in the questions and options. 
-    - Wrap inline math in single $...$ and block equations in double $$...$$. 
-    - ESCAPE JSON: Ensure your LaTeX backslashes are properly escaped in the JSON string output (e.g., \\\\frac).
-    
+    {base_prompt}
     🛑 MANDATORY: You MUST output exactly {missing_count} items in your JSON array. No more, no less.
-    🛑 CRITICAL INSTRUCTION: For 'correct_answer', output ONLY the single uppercase letter (A, B, C, or D).
+    🛑 CRITICAL INSTRUCTION: For 'correct_answer', output ONLY the single uppercase letter (A, B, C, or D). Do not write the full answer text!
     """
 
 def get_navigator_prompt(student_id, recent_score, current_topic, curr_data, student_history):
@@ -525,7 +518,7 @@ def main():
     args = parser.parse_args()
     run_mode = args.mode
 
-    print(f"Initializing Circular Grader System (V3.6 - React Typography & Images) [MODE: {run_mode.upper()}]...")
+    print(f"Initializing Circular Grader System (Production Revert) [MODE: {run_mode.upper()}]...")
     sheet_client, drive_service, form_service, slides_service = get_google_services()
     
     bm_data, gm_data = {}, {}
@@ -559,7 +552,7 @@ def main():
         with open("item_analysis_rules.json", "r") as f:
             tos_rules = json.load(f)
             
-    print("📦 Caching Google Sheets into memory...")
+    print("📦 Caching Google Sheets into memory to prevent API rate limits...")
     workbook = sheet_client.open("Business_Math_Master_Gradebook")
     
     sheet = workbook.worksheet("Skill_Analytics")
@@ -568,15 +561,13 @@ def main():
     roster_sheet = workbook.worksheet("Master_Roster")
     log_sheet = workbook.worksheet("Performance_Logs")
     deploy_sheet = workbook.worksheet("Deployments_Library") 
-    summary_sheet = workbook.worksheet("Class_Summary")
-    
+
     try:
-        submissions_sheet = workbook.worksheet("Submissions")
-    except:
-        submissions_sheet = workbook.add_worksheet(title="Submissions", rows="1000", cols="5")
-        safe_sheet_action(submissions_sheet.append_row, ["Timestamp", "LRN", "Answers", "Infractions", "Status"])
+        summary_sheet = workbook.worksheet("Class_Summary")
+    except Exception:
+        summary_sheet = workbook.add_worksheet(title="Class_Summary", rows="100", cols="5")
+        safe_sheet_action(summary_sheet.append_row, ["Date", "Section", "Daily_Output", "Weekly_Output", "Reflection"])
         
-    submissions_data = submissions_sheet.get_all_values()
     all_values = sheet.get_all_values()
     headers = all_values[0]
     all_records = [dict(zip(headers, row)) for row in all_values[1:]]
@@ -586,7 +577,7 @@ def main():
     roster_data = roster_sheet.get_all_records()
     deploy_data = deploy_sheet.get_all_records()
     log_data = log_sheet.get_all_values() 
-    print("✅ Databases loaded successfully.")
+    print("✅ Databases loaded successfully. Read requests drop to 0 during loop!")
 
     global_harvest_cache = {}
     deployment_cache = {} 
@@ -638,26 +629,41 @@ def main():
         strand_focus = raw_strand.strip().upper()
         student_context_profile = find_student_profile(context_data, strand_focus)
 
+        # --- MODE ROUTER (GATEKEEPER) ---
         if run_mode == "deploy" and form_gen_status not in ["ADVANCE_NEXT_TOPIC", "ADVANCE_RETRY", "READY"]:
             continue
+            
         if run_mode == "grade" and rem_status != "Pending":
             continue
 
+        # --- PHASE 0: AUTO-ADVANCEMENT STATE MACHINE ---
         if form_gen_status == "ADVANCE_NEXT_TOPIC":
             recent_score = row.get("Score", 0)
+            print(f"🧠 AI Navigator analyzing progression for Student {student_id} (Last Score: {recent_score}%)...")
+            
             student_history = [str(r[2]).strip() for r in log_data[1:] if str(r[1]).strip() == student_id]
             active_exam = get_active_scheduled_exam()
             is_course_complete = False
             
             if active_exam:
                 raw_exam_code = active_exam['topic_code']
-                next_comp_check = f"GENMATH_{raw_exam_code}" if subject_code == "CORE_GENMATH11" else raw_exam_code
+                if subject_code == "CORE_GENMATH11":
+                    next_comp_check = f"GENMATH_{raw_exam_code}"
+                else:
+                    next_comp_check = raw_exam_code
+                    
                 if next_comp_check in student_history:
                     active_exam = None
             
             if active_exam:
+                print(f"📅 Schedule Override: Activating {active_exam['exam_type']} for {student_id}")
                 raw_exam_code = active_exam['topic_code']
-                next_comp = f"GENMATH_{raw_exam_code}" if subject_code == "CORE_GENMATH11" else raw_exam_code
+                
+                if subject_code == "CORE_GENMATH11":
+                    next_comp = f"GENMATH_{raw_exam_code}"
+                else:
+                    next_comp = raw_exam_code
+                    
                 next_type = active_exam['exam_type']
                 
                 safe_sheet_action(sheet.update_cells, [
@@ -718,6 +724,7 @@ def main():
                 else: continue
             
         elif form_gen_status == "ADVANCE_RETRY":
+            print(f"🔄 Prepping Student {row.get('Student_ID')} for Attempt #2 on {comp_code}")
             safe_sheet_action(sheet.update_cells, [
                 gspread.Cell(row_idx, headers.index("Form_Generation_Status") + 1, "READY"),
                 gspread.Cell(row_idx, headers.index("Tries") + 1, 2),
@@ -729,6 +736,7 @@ def main():
             form_gen_status = "READY"
             row["Tries"] = 2
 
+        # --- PHASE 1: GENERATION (Forms & Slides) ---
         if form_gen_status == "READY":
             try_count = int(row.get("Tries", 1) or 1)
             cache_key = f"{subject_code}_{comp_code}_{strand_focus}_Try_{try_count}"
@@ -762,8 +770,10 @@ def main():
 
             if deploy_rec:
                 form_url = deploy_rec.get('Form_URL', '')
+                print(f"⚡ Sharing globally cached form URL for {comp_code} ({strand_focus}, Attempt #{try_count}) from Deployments Library...")
             elif cache_key in deployment_cache:
                 form_url = deployment_cache[cache_key]
+                print(f"⚡ Sharing session-cached form URL for {comp_code} ({strand_focus}, Attempt #{try_count})...")
             else:
                 banked_questions = fetch_banked_questions(bank_data, comp_code, strand_focus)
                 missing_count = max(0, rules["target_count"] - len(banked_questions))
@@ -792,6 +802,7 @@ def main():
                     form_url = deploy_fresh_form(comp_code, instruction_title, instruction_body, final_form_quiz, drive_service, form_service)
                     deployment_cache[cache_key] = form_url
                     save_to_deployments(deploy_sheet, deploy_data, comp_code, strand_focus, try_count, form_url, core_url, rem_url, adv_url)
+                    print(f"✅ Form Natively Generated and Deployed for {comp_code}. Saved to Library.")
                 except Exception as e: print(f"Form Gen Error: {e}")
 
             try:
@@ -806,42 +817,27 @@ def main():
                 if "Advanced_Slides" in headers and adv_url: update_payload.append(gspread.Cell(row_idx, headers.index("Advanced_Slides") + 1, adv_url))
 
                 safe_sheet_action(sheet.update_cells, update_payload)
+                print(f"✅ Handing off {comp_code} to n8n for email distribution.")
             except Exception as e: print(f"Payload Update Error: {e}")
             
             time.sleep(2)
             continue
 
+        # --- PHASE 2: HARVESTING & GRADING (Restored Google Forms Logic) ---
         if str(row.get("Remediation_Status", "")).strip() == "Pending":
             form_url = str(row.get("Form_URL", "")).strip()
             if not student_id: continue 
                 
             digital_answers = str(row.get("Digital_Answers", "")).strip()
             
-            in_app_sub = None
-            for sub_idx, sub_row in enumerate(submissions_data[1:], start=2):
-                if len(sub_row) >= 5 and str(sub_row[1]).strip() == student_id and str(sub_row[4]).strip() == "Pending Grading":
-                    in_app_sub = {"row_idx": sub_idx, "answers": sub_row[2], "infractions": int(sub_row[3]) if str(sub_row[3]).isdigit() else 0}
-                    break
-
-            if in_app_sub:
-                try:
-                    raw_answers = json.loads(in_app_sub["answers"])
-                    idx_to_letter = {0: 'A', 1: 'B', 2: 'C', 3: 'D'}
-                    choices = [idx_to_letter.get(int(v), "MISSING") for k, v in raw_answers.items()]
-                    digital_answers = ", ".join(choices)
-                    
+            # Use Original Google Forms Harvester
+            if not digital_answers and form_url:
+                if form_url not in global_harvest_cache:
+                    global_harvest_cache[form_url] = harvest_responses(form_service, form_url)
+                
+                if student_id in global_harvest_cache[form_url]:
+                    digital_answers = global_harvest_cache[form_url][student_id]
                     safe_sheet_action(sheet.update_cell, row_idx, headers.index("Digital_Answers") + 1, digital_answers)
-                    safe_sheet_action(submissions_sheet.update_cell, in_app_sub["row_idx"], 5, "Graded")
-                except Exception as e:
-                    print(f"Error parsing In-App answers: {e}")
-            else:
-                if not digital_answers and form_url:
-                    if form_url not in global_harvest_cache:
-                        global_harvest_cache[form_url] = harvest_responses(form_service, form_url)
-                    
-                    if student_id in global_harvest_cache[form_url]:
-                        digital_answers = global_harvest_cache[form_url][student_id]
-                        safe_sheet_action(sheet.update_cell, row_idx, headers.index("Digital_Answers") + 1, digital_answers)
 
             if not digital_answers: continue
 
@@ -868,13 +864,6 @@ def main():
                 status = "Needs Review"
                 vault_rec = fetch_from_vault(vault_data, comp_code, strand_focus)
                 final_feedback = format_math_text(vault_rec.get('Remediation_Scaffolding', diag_feedback)) if vault_rec else diag_feedback
-
-            if in_app_sub and in_app_sub["infractions"] > 0:
-                inf_count = in_app_sub["infractions"]
-                if inf_count >= 3:
-                    final_feedback = f"🚨 PROCTOR WARNING: Exam auto-terminated due to maximum cheating infractions ({inf_count} strikes). Screen focus and eye-tracking anomalies logged.\n\n" + final_feedback
-                else:
-                    final_feedback = f"⚠️ PROCTOR NOTE: {inf_count} minor infraction(s) logged (looking away/tab switching).\n\n" + final_feedback
 
             if raw_section not in run_stats_by_section:
                 run_stats_by_section[raw_section] = get_empty_stats()
